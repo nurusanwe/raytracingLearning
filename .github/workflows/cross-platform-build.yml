@@ -1,0 +1,139 @@
+name: Cross-Platform Educational Build
+
+on: [push, pull_request]
+
+jobs:
+  build-and-test:
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, macos-13] # Apple Silicon, Linux, Intel Mac
+        include:
+          - os: macos-latest
+            platform: "Apple Silicon"
+          - os: ubuntu-latest  
+            platform: "Linux"
+          - os: macos-13
+            platform: "Intel Mac"
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Install Dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        # Epic 1: No dependencies needed
+        # Epic 2+: Install Dear ImGui dependencies
+        brew install cmake
+        if [[ -d "external/imgui" ]]; then
+          brew install glfw
+        fi
+    
+    - name: Install Dependencies (Linux)
+      if: runner.os == 'Linux'  
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential
+        # Epic 2+: Install Dear ImGui dependencies  
+        if [[ -d "external/imgui" ]]; then
+          sudo apt-get install -y libglfw3-dev libgl1-mesa-dev
+        fi
+    
+    - name: Setup Educational Environment
+      run: |
+        echo "=== Educational Ray Tracer CI Build ==="
+        echo "Platform: ${{ matrix.platform }}"
+        echo "Epic Detection: Checking which epic this build supports..."
+        
+        if [[ -f "src/main.cpp" && ! -d "external/imgui" ]]; then
+          echo "✅ Epic 1: Foundation build detected"
+        elif [[ -d "external/imgui" ]]; then
+          echo "✅ Epic 2+ build detected with UI framework"
+        else
+          echo "⚠️  Unknown epic configuration - proceeding with basic build"
+        fi
+    
+    - name: Build Educational Ray Tracer (Epic 1)
+      if: ${{ !contains(github.event.head_commit.message, 'epic2') && !contains(github.event.head_commit.message, 'epic3') }}
+      run: |
+        # Epic 1: Simple C++ build without external dependencies
+        mkdir -p build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Release
+        make
+        echo "✅ Epic 1 build completed successfully"
+    
+    - name: Build Educational Ray Tracer (Epic 2+) 
+      if: ${{ contains(github.event.head_commit.message, 'epic2') || contains(github.event.head_commit.message, 'epic3') }}
+      run: |
+        # Epic 2+: Build with Dear ImGui and dependencies
+        if [[ ! -d "external/imgui" ]]; then
+          echo "⚠️  Epic 2+ build requested but Dear ImGui not found"
+          echo "Run: git submodule add https://github.com/ocornut/imgui.git external/imgui"
+          exit 1
+        fi
+        
+        mkdir -p build  
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_UI=ON
+        make
+        echo "✅ Epic 2+ build completed successfully"
+    
+    - name: Run Mathematical Correctness Tests
+      run: |
+        if [[ -f "build/test_math_correctness" ]]; then
+          echo "Running mathematical validation tests..."
+          ./build/test_math_correctness
+          echo "✅ Mathematical correctness validated"
+        else
+          echo "⚠️  Mathematical tests not found - skipping validation"
+        fi
+    
+    - name: Validate Epic Requirements
+      run: |
+        echo "=== Epic Validation ==="
+        
+        # Epic 1 validation
+        if [[ -f "build/raytracer" || -f "build/raytracer.exe" ]]; then
+          echo "✅ Executable built successfully"
+        else
+          echo "❌ Ray tracer executable not found"
+          exit 1
+        fi
+        
+        # Check for educational features
+        if [[ -f "src/core/educational_mode.hpp" ]]; then
+          echo "✅ Educational transparency features found"
+        else
+          echo "⚠️  Educational features not implemented yet"
+        fi
+        
+        echo "🎓 Educational build validation completed on ${{ matrix.platform }}"
+    
+    - name: Educational Build Report
+      if: always()
+      run: |
+        echo "=================================="
+        echo "📊 Educational Build Summary"
+        echo "=================================="
+        echo "Platform: ${{ matrix.platform }}"
+        echo "OS: ${{ matrix.os }}"
+        echo "Status: ${{ job.status }}"
+        
+        if [[ -f "build/raytracer" || -f "build/raytracer.exe" ]]; then
+          echo "✅ Ray tracer executable: CREATED"
+        else
+          echo "❌ Ray tracer executable: MISSING"
+        fi
+        
+        echo "=================================="
+        echo "🎯 Next Steps for Students:"
+        echo "1. Clone this repository"
+        echo "2. Run: ./tools/setup_dependencies.sh"
+        echo "3. Run: ./tools/build_simple.sh"
+        echo "4. Start with Epic 1 implementation"
+        echo "=================================="
