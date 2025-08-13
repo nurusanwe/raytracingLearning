@@ -34,6 +34,25 @@ namespace MathematicalTests {
         assert(std::abs(normalized_length - 1.0f) < 1e-6);
         std::cout << "  Normalization test: PASSED" << std::endl;
         
+        std::cout << "Testing Vector3 compound operators..." << std::endl;
+        Vector3 d(1, 1, 1);
+        d += Vector3(2, 3, 4);  // Should be (3, 4, 5)
+        assert(std::abs(d.x - 3.0f) < 1e-6);
+        assert(std::abs(d.y - 4.0f) < 1e-6);
+        assert(std::abs(d.z - 5.0f) < 1e-6);
+        
+        d *= 2.0f;  // Should be (6, 8, 10)
+        assert(std::abs(d.x - 6.0f) < 1e-6);
+        assert(std::abs(d.y - 8.0f) < 1e-6);
+        assert(std::abs(d.z - 10.0f) < 1e-6);
+        
+        // Test scalar * vector
+        Vector3 e = 3.0f * Vector3(1, 2, 3);  // Should be (3, 6, 9)
+        assert(std::abs(e.x - 3.0f) < 1e-6);
+        assert(std::abs(e.y - 6.0f) < 1e-6);
+        assert(std::abs(e.z - 9.0f) < 1e-6);
+        std::cout << "  Compound operators test: PASSED" << std::endl;
+        
         return true;
     }
     
