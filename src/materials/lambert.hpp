@@ -116,7 +116,7 @@ public:
 
         if (is_energy_conserving) {
             // Calculate maximum possible reflectance for verification
-            float max_reflectance = std::max({base_color.x, base_color.y, base_color.z});
+            float max_reflectance = std::max(base_color.x, std::max(base_color.y, base_color.z));
             std::cout << "Maximum reflectance: " << max_reflectance << " (should be ≤ 1.0)" << std::endl;
             std::cout << "Energy conservation verified: material cannot reflect more energy than received" << std::endl;
         } else {
