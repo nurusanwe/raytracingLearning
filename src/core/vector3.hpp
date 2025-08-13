@@ -36,6 +36,11 @@ public:
         return Vector3(0, 0, 0);
     }
     
+    // Squared length (more efficient for comparisons)
+    float length_squared() const {
+        return x * x + y * y + z * z;
+    }
+    
     // Basic operators
     Vector3 operator+(const Vector3& other) const {
         return Vector3(x + other.x, y + other.y, z + other.z);
@@ -48,4 +53,30 @@ public:
     Vector3 operator*(float scalar) const {
         return Vector3(x * scalar, y * scalar, z * scalar);
     }
+    
+    Vector3& operator+=(const Vector3& other) {
+        x += other.x;
+        y += other.y; 
+        z += other.z;
+        return *this;
+    }
+    
+    Vector3& operator-=(const Vector3& other) {
+        x -= other.x;
+        y -= other.y;
+        z -= other.z;
+        return *this;
+    }
+    
+    Vector3& operator*=(float scalar) {
+        x *= scalar;
+        y *= scalar;
+        z *= scalar;
+        return *this;
+    }
 };
+
+// Free function for scalar * vector
+inline Vector3 operator*(float scalar, const Vector3& v) {
+    return v * scalar;
+}
