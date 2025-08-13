@@ -14,6 +14,7 @@ cmake-build-*/
 
 # Executables
 raytracer
+test_math
 test_math_correctness
 *.exe
 
