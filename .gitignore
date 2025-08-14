@@ -12,6 +12,10 @@ cmake-build-*/
 *.a
 *.lib
 
+# Precompiled headers
+*.pch
+*.gch
+
 # Executables
 raytracer
 test_math
