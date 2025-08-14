@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cassert>
 #include <cmath>
+#include <vector>
 #include "src/core/vector3.hpp"
 #include "src/core/point3.hpp"
 #include "src/core/ray.hpp"
