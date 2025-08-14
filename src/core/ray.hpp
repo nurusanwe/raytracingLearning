@@ -7,6 +7,25 @@
 // Ray equation: P(t) = origin + t * direction, where t ≥ 0
 // Geometric interpretation: Starting point with infinite extension in one direction
 // Ray tracing usage: Models light paths, viewing rays, shadow rays
+//
+// ASCII Art Diagram:
+//
+//      P(t) = O + t*D
+//        
+//   t=0     t=1     t=2
+//    O-------•-------•-----> direction D
+//  origin   P(1)   P(2)
+//
+// Mathematical Properties:
+//   - t=0: Ray origin point
+//   - t>0: Points along ray in forward direction  
+//   - t<0: Points behind ray origin (usually not used in ray tracing)
+//   - |P(t) - O| = t * |D| when D is unit vector
+//
+// Physics Context:
+//   - Models light ray paths in geometric optics
+//   - Represents viewing rays from camera through pixels
+//   - Used for shadow ray calculations in lighting
 class Ray {
 public:
     Point3 origin;      // Starting point of ray in 3D space
