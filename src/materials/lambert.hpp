@@ -7,6 +7,59 @@
 // Mathematical foundation: perfectly diffuse reflection following Lambert's cosine law
 // Physical principle: light scattered equally in all directions over hemisphere
 // Energy conservation: total reflected energy never exceeds incident energy
+//
+// RENDERING EQUATION THEORY:
+//
+// The rendering equation (Kajiya, 1986):
+//   L_o(p, ω_o) = L_e(p, ω_o) + ∫_Ω f_r(p, ω_i, ω_o) L_i(p, ω_i) (n · ω_i) dω_i
+//
+// Where:
+//   L_o = outgoing radiance
+//   L_e = emitted radiance (0 for non-emissive surfaces)
+//   f_r = BRDF (bidirectional reflectance distribution function)
+//   L_i = incoming radiance
+//   n = surface normal
+//   ω_i = incident direction
+//   ω_o = outgoing direction
+//   Ω = hemisphere of directions
+//
+// LAMBERT BRDF DERIVATION:
+//
+// For perfectly diffuse surfaces (Lambertian):
+//   - Reflected radiance independent of viewing angle
+//   - Equal probability of scattering in all hemisphere directions
+//   - BRDF must be constant: f_r(ω_i, ω_o) = ρ/π
+//
+// The π factor comes from energy conservation:
+//   ∫_hemisphere f_r cos(θ) dω = ρ
+//   For constant f_r: f_r ∫_hemisphere cos(θ) dω = ρ
+//   Since ∫_hemisphere cos(θ) dω = π, we get f_r = ρ/π
+//
+// ASCII Art Diagram:
+//
+//   Lambert Reflection (Equal brightness from all viewing angles):
+//
+//         viewer 1    viewer 2    viewer 3
+//             ↖        ↑          ↗
+//              \\       |         /
+//               \\      |        /
+//                \\     |       /
+//           ================== surface
+//                     ↑
+//               incident light
+//
+//   All viewers see same brightness despite different angles!
+//
+// PHYSICAL INTERPRETATION:
+//   - Models matte surfaces like chalk, unpolished wood, paper
+//   - Microscopic surface roughness causes isotropic scattering
+//   - Quantum mechanics: photons scatter uniformly in all directions
+//
+// References:
+//   - Lambert, J.H. "Photometria" (1760) - original cosine law
+//   - Kajiya, J.T. "The Rendering Equation" SIGGRAPH 1986
+//   - Nicodemus, F.E. "Reflectance Nomenclature" NBS 1977
+//   - Pharr, Jakob, Humphreys "Physically Based Rendering" 4th ed.
 class LambertMaterial {
 public:
     Vector3 base_color;  // Albedo color - fraction of light reflected per wavelength (RGB channels)

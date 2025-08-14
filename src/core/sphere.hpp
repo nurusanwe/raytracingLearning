@@ -41,6 +41,62 @@ public:
     // Mathematical approach: substitute ray equation P(t) = O + t*D into sphere equation
     // Geometric interpretation: find where infinite ray line crosses sphere surface
     // Returns closest intersection with t > 0 (in front of ray origin)
+    //
+    // MATHEMATICAL DERIVATION:
+    //
+    // Sphere equation: |P - C|² = r²  where P=point, C=center, r=radius
+    // Ray equation: P(t) = O + t*D    where O=origin, D=direction, t=parameter
+    //
+    // Substituting ray into sphere:
+    //   |O + t*D - C|² = r²
+    //   |oc + t*D|² = r²           where oc = O - C
+    //   (oc + t*D)·(oc + t*D) = r²
+    //   oc·oc + 2t(oc·D) + t²(D·D) = r²
+    //   (D·D)t² + 2(oc·D)t + (oc·oc - r²) = 0
+    //
+    // Standard quadratic form: at² + bt + c = 0
+    //   a = D·D     (squared length of direction)
+    //   b = 2(oc·D) (projection of origin-center onto direction)
+    //   c = oc·oc - r² (squared distance from origin to center, minus r²)
+    //
+    // Solutions using quadratic formula:
+    //   t = (-b ± √(b² - 4ac)) / (2a)
+    //
+    // Discriminant interpretation:
+    //   Δ = b² - 4ac
+    //   Δ > 0: Two intersections (ray passes through sphere)
+    //   Δ = 0: One intersection (ray tangent to sphere)
+    //   Δ < 0: No intersection (ray misses sphere)
+    //
+    // ASCII Art Diagram:
+    //
+    //    Ray-Sphere Intersection Cases:
+    //
+    //    Case 1: Two intersections (Δ > 0)
+    //         O----t1---t2-----> D
+    //            \  (  ) /
+    //             \ ( C ) /
+    //              \(   )/  
+    //               \   /
+    //                \ /
+    //
+    //    Case 2: Tangent (Δ = 0)
+    //         O-------t---------> D
+    //                |
+    //                ( C )
+    //               (     )
+    //                \   /
+    //                 \ /
+    //
+    //    Case 3: Miss (Δ < 0)
+    //         O-----------------> D
+    //                 ( C )
+    //                (     )
+    //                 \   /
+    //                  \ /
+    //
+    // Reference: "Real-Time Rendering" by Akenine-Möller et al. (4th ed.)
+    //           "Ray Tracing Gems" edited by Haines & Shirley (2019)
     Intersection intersect(const Ray& ray) const {
         std::cout << "\n=== Ray-Sphere Intersection Calculation ===" << std::endl;
         std::cout << "Ray origin: (" << ray.origin.x << ", " << ray.origin.y << ", " << ray.origin.z << ")" << std::endl;

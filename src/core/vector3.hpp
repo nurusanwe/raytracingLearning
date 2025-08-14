@@ -11,6 +11,30 @@ public:
     // Dot product - measures projection of one vector onto another
     // Result: scalar indicating how much vectors point in same direction
     // Geometric interpretation: |a||b|cos(θ) where θ is angle between vectors
+    //
+    // Mathematical Properties:
+    //   - Commutative: a·b = b·a
+    //   - Distributive: a·(b+c) = a·b + a·c  
+    //   - Scalar multiplication: (ka)·b = k(a·b)
+    //   - Self dot product: a·a = |a|²
+    //
+    // Physics Applications:
+    //   - Lambert's law: n·l gives surface illumination (Lambertian Reflectance, Lambert 1760)
+    //   - Work calculation: W = F·d (force dot displacement)
+    //   - Angle calculation: cos(θ) = (a·b)/(|a||b|)
+    //   - Projection length: |proj_b(a)| = (a·b)/|b|
+    //
+    // ASCII Art Diagram:
+    //
+    //     a·b = |a||b|cos(θ)
+    //        
+    //        a
+    //         ↗ ← θ angle
+    //        /
+    //       /
+    //      ------→ b
+    //     projection
+    //
     float dot(const Vector3& other) const {
         return x * other.x + y * other.y + z * other.z;
     }
@@ -19,6 +43,34 @@ public:
     // Result: Vector3 orthogonal to both inputs, follows right-hand rule
     // Geometric interpretation: |a||b|sin(θ) magnitude, direction given by right-hand rule
     // Formula: a × b = (a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y - a.y*b.x)
+    //
+    // Mathematical Properties:
+    //   - Anti-commutative: a×b = -(b×a)
+    //   - Distributive: a×(b+c) = a×b + a×c
+    //   - Scalar multiplication: (ka)×b = k(a×b)
+    //   - Self cross product: a×a = 0 (zero vector)
+    //   - Magnitude: |a×b| = |a||b|sin(θ)
+    //
+    // Physics Applications:
+    //   - Surface normal calculation from two edge vectors
+    //   - Angular momentum: L = r × p (Goldstein Classical Mechanics)
+    //   - Torque: τ = r × F (force applied at distance)
+    //   - Magnetic force: F = q(v × B) (Lorentz force)
+    //
+    // ASCII Art Diagram (Right-hand rule):
+    //
+    //      c = a × b
+    //        ↑
+    //        |
+    //        |     a
+    //        |    ↗
+    //        |   /
+    //        |  /
+    //        | /
+    //        |------→ b
+    //
+    // Reference: Vector Analysis by Gibbs & Wilson (1901)
+    //
     Vector3 cross(const Vector3& other) const {
         return Vector3(
             y * other.z - z * other.y,  // i component: eliminates x components
@@ -36,8 +88,34 @@ public:
     
     // Vector normalization - creates unit vector with same direction
     // Geometric interpretation: scales vector to length 1 while preserving direction
-    // Formula: v/|v| where |v| is vector magnitude
+    // Formula: v̂ = v/|v| where |v| is vector magnitude, v̂ is unit vector
     // Returns zero vector for near-zero length vectors to avoid division by zero
+    //
+    // Mathematical Properties:
+    //   - |v̂| = 1 (unit length by definition)
+    //   - Direction preserved: v̂ = λv where λ = 1/|v|
+    //   - Idempotent for unit vectors: normalize(v̂) = v̂
+    //
+    // Physics Applications:
+    //   - Direction vectors for rays and surface normals
+    //   - Unit vectors in spherical/cylindrical coordinates
+    //   - Basis vectors in local coordinate systems
+    //   - Normalized velocity vectors for direction-only calculations
+    //
+    // ASCII Art Diagram:
+    //
+    //    Original vector v     Normalized vector v̂
+    //         ----→             --→ (length = 1)
+    //        /                 /
+    //       /                 /
+    //      /                 /
+    //     O                 O
+    //
+    // Numerical Stability Note:
+    //   - Uses 1e-6 tolerance to avoid division by zero
+    //   - Returns zero vector for degenerate cases
+    //   - Single division optimization: multiply by 1/length
+    //
     Vector3 normalize() const {
         float len = length();
         if (len > 1e-6f) {  // Numerical tolerance for stability
