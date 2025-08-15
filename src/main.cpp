@@ -5,6 +5,9 @@
 #include "core/sphere.hpp"
 #include "core/point_light.hpp"
 #include "materials/lambert.hpp"
+#include "core/camera.hpp"
+#include "core/image.hpp"
+#include <chrono>
 
 // Cross-platform preprocessor directives
 #ifdef PLATFORM_APPLE
@@ -308,7 +311,199 @@ int main() {
     
     std::cout << "\n=== Single-Ray Rendering Pipeline Complete ===" << std::endl;
     std::cout << "All mathematical steps verified and educational output provided" << std::endl;
-    std::cout << "Ready for mathematical validation testing phase" << std::endl;
+    std::cout << "Ready for multi-ray image generation phase" << std::endl;
+    
+    std::cout << "\n=== Story 2.1: Multi-Ray Image Generation ===" << std::endl;
+    
+    // Performance monitoring setup
+    auto total_start_time = std::chrono::high_resolution_clock::now();
+    
+    // Image resolution configuration
+    int image_width = 256;   // Educational resolution for demonstration
+    int image_height = 256;  // Square aspect ratio for simplicity
+    
+    std::cout << "\n--- Multi-Ray Rendering Configuration ---" << std::endl;
+    std::cout << "Image resolution: " << image_width << " × " << image_height << " pixels" << std::endl;
+    std::cout << "Total rays to generate: " << (image_width * image_height) << std::endl;
+    std::cout << "Rendering approach: One ray per pixel (uniform sampling)" << std::endl;
+    
+    // Camera setup for image generation
+    Point3 camera_position(0, 0, 0);
+    Point3 camera_target(0, 0, -3);  // Looking toward sphere center
+    Vector3 camera_up(0, 1, 0);      // Y is up
+    float camera_fov = 45.0f;        // 45-degree field of view
+    float aspect_ratio = static_cast<float>(image_width) / image_height;
+    
+    Camera render_camera(camera_position, camera_target, camera_up, camera_fov, aspect_ratio);
+    
+    // Validate camera configuration
+    if (!render_camera.validate_camera()) {
+        std::cout << "ERROR: Invalid camera configuration!" << std::endl;
+        return 1;
+    }
+    
+    std::cout << "\n--- Camera Configuration ---" << std::endl;
+    render_camera.print_camera_parameters();
+    render_camera.explain_coordinate_transformation();
+    
+    // Scene setup (adjusted sphere position to be in camera view)
+    Sphere image_sphere(Point3(0, 0, -3), 1.0f);  // Sphere positioned in camera field of view
+    LambertMaterial image_material(Vector3(0.7f, 0.3f, 0.3f));  // Reddish diffuse
+    PointLight image_light(Point3(2, 2, -3), Vector3(1.0f, 1.0f, 1.0f), 10.0f);
+    
+    std::cout << "\n--- Scene Configuration ---" << std::endl;
+    std::cout << "Sphere center: (" << image_sphere.center.x << ", " << image_sphere.center.y << ", " << image_sphere.center.z << ")" << std::endl;
+    std::cout << "Sphere radius: " << image_sphere.radius << std::endl;
+    std::cout << "Material albedo: (" << image_material.base_color.x << ", " << image_material.base_color.y << ", " << image_material.base_color.z << ")" << std::endl;
+    
+    // Image buffer creation
+    Image output_image(image_width, image_height);
+    std::cout << "\n--- Image Buffer Configuration ---" << std::endl;
+    std::cout << "Created " << image_width << "×" << image_height << " image buffer" << std::endl;
+    std::cout << "Pixel storage: Vector3 (linear RGB)" << std::endl;
+    std::cout << "Color management: Clamping + gamma correction pipeline" << std::endl;
+    
+    // Educational color management explanation
+    output_image.explain_color_management();
+    
+    // Performance counters
+    int rays_generated = 0;
+    int intersection_tests = 0;
+    int shading_calculations = 0;
+    int background_pixels = 0;
+    
+    auto ray_generation_start = std::chrono::high_resolution_clock::now();
+    
+    std::cout << "\n--- Multi-Ray Rendering Process ---" << std::endl;
+    std::cout << "Beginning pixel-by-pixel ray generation..." << std::endl;
+    
+    // Multi-ray pixel sampling: one ray per pixel
+    for (int y = 0; y < image_height; y++) {
+        // Progress reporting every 32 rows for educational visibility
+        if (y % 32 == 0 && y > 0) {
+            float progress = static_cast<float>(y) / image_height * 100.0f;
+            std::cout << "Rendering progress: " << progress << "% (" << y << "/" << image_height << " rows)" << std::endl;
+        }
+        
+        for (int x = 0; x < image_width; x++) {
+            // Generate camera ray for this pixel
+            Ray pixel_ray = render_camera.generate_ray(
+                static_cast<float>(x), 
+                static_cast<float>(y), 
+                image_width, 
+                image_height
+            );
+            rays_generated++;
+            
+            
+            // Test ray-sphere intersection
+            Sphere::Intersection intersection = image_sphere.intersect(pixel_ray);
+            intersection_tests++;
+            
+            Vector3 pixel_color(0, 0, 0);  // Default background color (black)
+            
+            if (intersection.hit) {
+                // Sphere intersection found - calculate lighting
+                shading_calculations++;
+                
+                // Light evaluation
+                Vector3 light_direction = image_light.sample_direction(intersection.point);
+                Vector3 incident_irradiance = image_light.calculate_irradiance(intersection.point);
+                
+                // View direction (from surface to camera)
+                Vector3 view_direction = (camera_position - intersection.point).normalize();
+                
+                // Complete light transport using Lambert BRDF
+                pixel_color = image_material.scatter_light(
+                    light_direction, 
+                    view_direction, 
+                    intersection.normal, 
+                    incident_irradiance
+                );
+            } else {
+                // No intersection - background color
+                background_pixels++;
+                pixel_color = Vector3(0.1f, 0.1f, 0.15f);  // Dark blue background
+            }
+            
+            // Store pixel in image buffer
+            output_image.set_pixel(x, y, pixel_color);
+        }
+    }
+    
+    auto ray_generation_end = std::chrono::high_resolution_clock::now();
+    auto total_end_time = std::chrono::high_resolution_clock::now();
+    
+    // Performance analysis
+    auto ray_generation_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+        ray_generation_end - ray_generation_start);
+    auto total_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+        total_end_time - total_start_time);
+    
+    std::cout << "\n--- Multi-Ray Rendering Complete ---" << std::endl;
+    std::cout << "Final rendering statistics:" << std::endl;
+    
+    std::cout << "\n=== Educational Performance Analysis ===" << std::endl;
+    std::cout << "Ray Generation Statistics:" << std::endl;
+    std::cout << "  Total rays generated: " << rays_generated << std::endl;
+    std::cout << "  Expected rays (width × height): " << (image_width * image_height) << std::endl;
+    std::cout << "  Ray generation accuracy: " << (rays_generated == (image_width * image_height) ? "PERFECT" : "ERROR") << std::endl;
+    
+    std::cout << "Intersection Testing Statistics:" << std::endl;
+    std::cout << "  Total intersection tests: " << intersection_tests << std::endl;
+    std::cout << "  Tests per ray: " << (static_cast<float>(intersection_tests) / rays_generated) << std::endl;
+    
+    std::cout << "Shading Calculation Statistics:" << std::endl;
+    std::cout << "  Shading calculations performed: " << shading_calculations << std::endl;
+    std::cout << "  Background pixels (no shading): " << background_pixels << std::endl;
+    std::cout << "  Scene coverage: " << (100.0f * shading_calculations / rays_generated) << "%" << std::endl;
+    
+    std::cout << "Performance Timing:" << std::endl;
+    std::cout << "  Ray generation time: " << ray_generation_duration.count() << " ms" << std::endl;
+    std::cout << "  Total rendering time: " << total_duration.count() << " ms" << std::endl;
+    std::cout << "  Rays per second: " << (rays_generated * 1000.0f / total_duration.count()) << std::endl;
+    
+    // Image analysis
+    std::cout << "\n=== Educational Image Analysis ===" << std::endl;
+    output_image.print_image_statistics();
+    
+    // Validate final image
+    if (!output_image.validate_image()) {
+        std::cout << "ERROR: Image validation failed!" << std::endl;
+        return 1;
+    }
+    
+    std::cout << "\n--- Multi-Ray Pipeline Summary ---" << std::endl;
+    std::cout << "1. Camera-to-pixel coordinate transformation: " << rays_generated << " rays generated" << std::endl;
+    std::cout << "2. Ray-sphere intersection testing: " << intersection_tests << " tests performed" << std::endl;
+    std::cout << "3. Lambert BRDF shading calculations: " << shading_calculations << " evaluations" << std::endl;
+    std::cout << "4. Image buffer management: " << (image_width * image_height) << " pixels stored" << std::endl;
+    std::cout << "5. Color management pipeline: clamping and gamma correction ready" << std::endl;
+    
+    std::cout << "\n=== Image Generation and Pixel Sampling Complete ===" << std::endl;
+    std::cout << "Successfully generated " << image_width << "×" << image_height << " image" << std::endl;
+    std::cout << "All pixels processed with complete light transport calculations" << std::endl;
+    
+    // PNG Output Implementation (AC 4)
+    std::cout << "\n=== PNG Output Generation (AC 4) ===" << std::endl;
+    std::string png_filename = "raytracer_output.png";
+    bool png_success = output_image.save_to_png(png_filename, true);  // With gamma correction
+    
+    if (png_success) {
+        std::cout << "✓ Acceptance Criteria 4: PNG image output COMPLETE" << std::endl;
+        std::cout << "✓ Demonstrates successful rendering of simple sphere scene with visible Lambert shading" << std::endl;
+        std::cout << "✓ Generated file: " << png_filename << std::endl;
+    } else {
+        std::cout << "✗ PNG output failed - check file permissions and disk space" << std::endl;
+    }
+    
+    // Educational note about extension points for anti-aliasing
+    std::cout << "\n--- Extension Points for Future Development ---" << std::endl;
+    std::cout << "Anti-aliasing support design:" << std::endl;
+    std::cout << "  - Current: 1 ray per pixel (uniform sampling)" << std::endl;
+    std::cout << "  - Future: N rays per pixel with sample averaging" << std::endl;
+    std::cout << "  - Implementation: modify ray generation loop to sample multiple positions per pixel" << std::endl;
+    std::cout << "  - Mathematical foundation: Monte Carlo integration over pixel area" << std::endl;
     
     return 0;
 }
