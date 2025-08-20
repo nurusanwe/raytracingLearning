@@ -6,6 +6,8 @@
 #include "src/core/point3.hpp"
 #include "src/core/ray.hpp"
 #include "src/core/sphere.hpp"
+#include "src/core/scene.hpp"
+#include "src/core/scene_loader.hpp"
 #include "src/core/point_light.hpp"
 #include "src/core/camera.hpp"
 #include "src/materials/lambert.hpp"
@@ -101,7 +103,7 @@ namespace MathematicalTests {
         // intersection point = (0,0,0) + 4*(0,0,-1) = (0,0,-4)
         std::cout << "Test 1: Known ray-sphere intersection case..." << std::endl;
         Ray test_ray(Point3(0, 0, 0), Vector3(0, 0, -1));
-        Sphere test_sphere(Point3(0, 0, -5), 1.0f);
+        Sphere test_sphere(Point3(0, 0, -5), 1.0f, 0);
         
         std::cout << "  Manual calculation:" << std::endl;
         std::cout << "    oc = (0,0,0) - (0,0,-5) = (0,0,5)" << std::endl;
@@ -139,7 +141,7 @@ namespace MathematicalTests {
         // Should intersect at (1,0,0) with t=1
         std::cout << "Test 2: Unit sphere intersection verification..." << std::endl;
         Ray unit_ray(Point3(2, 0, 0), Vector3(-1, 0, 0));
-        Sphere unit_sphere(Point3(0, 0, 0), 1.0f);
+        Sphere unit_sphere(Point3(0, 0, 0), 1.0f, 0);
         
         std::cout << "  Manual calculation:" << std::endl;
         std::cout << "    Ray hits unit sphere from x=2 going toward origin" << std::endl;
@@ -294,7 +296,7 @@ namespace MathematicalTests {
         // Test Case 1: Grazing ray (discriminant ≈ 0)
         std::cout << "Test 1: Grazing ray with discriminant ≈ 0..." << std::endl;
         Ray grazing_ray(Point3(1.0f, 0, 0), Vector3(0, 0, -1));  // Ray tangent to unit sphere at origin
-        Sphere unit_sphere(Point3(0, 0, -5), 1.0f);
+        Sphere unit_sphere(Point3(0, 0, -5), 1.0f, 0);
         
         Sphere::Intersection grazing_result = unit_sphere.intersect(grazing_ray);
         std::cout << "  Expected: Single intersection point (tangent case)" << std::endl;
@@ -341,7 +343,7 @@ namespace MathematicalTests {
         // Test Case 5: Epsilon tolerance testing for numerical stability
         std::cout << "Test 5: Numerical stability with small values..." << std::endl;
         Ray epsilon_ray(Point3(0, 0, 1e-7f), Vector3(0, 0, -1));  // Very close to origin
-        Sphere tiny_sphere(Point3(0, 0, -1), 0.1f);  // Small sphere
+        Sphere tiny_sphere(Point3(0, 0, -1), 0.1f, 0);  // Small sphere
         Sphere::Intersection epsilon_result = tiny_sphere.intersect(epsilon_ray);
         
         std::cout << "  Testing numerical stability with small coordinates" << std::endl;
@@ -353,7 +355,7 @@ namespace MathematicalTests {
         // Test Case 6: Large distance ray-sphere intersection
         std::cout << "Test 6: Large distance numerical stability..." << std::endl;
         Ray far_ray(Point3(0, 0, 0), Vector3(0, 0, -1));
-        Sphere far_sphere(Point3(0, 0, -1000), 10.0f);  // Very far sphere
+        Sphere far_sphere(Point3(0, 0, -1000), 10.0f, 0);  // Very far sphere
         Sphere::Intersection far_result = far_sphere.intersect(far_ray);
         
         assert(far_result.hit);  // Should still work at large distances
@@ -912,7 +914,7 @@ namespace MathematicalTests {
         // Expected intersection at (0,0,-4) with t=4
         std::cout << "  Testing known intersection case..." << std::endl;
         Ray test_ray(Point3(0, 0, 0), Vector3(0, 0, -1));
-        Sphere test_sphere(Point3(0, 0, -5), 1.0f);
+        Sphere test_sphere(Point3(0, 0, -5), 1.0f, 0);
         
         Sphere::Intersection result = test_sphere.intersect(test_ray);
         
@@ -940,7 +942,7 @@ namespace MathematicalTests {
         // Test Case 4: Tangent ray (discriminant = 0)
         std::cout << "  Testing tangent ray case..." << std::endl;
         Ray tangent_ray(Point3(1, 0, 0), Vector3(0, 0, -1));  // Tangent to unit sphere
-        Sphere unit_sphere(Point3(0, 0, -5), 1.0f);
+        Sphere unit_sphere(Point3(0, 0, -5), 1.0f, 0);
         Sphere::Intersection tangent_result = unit_sphere.intersect(tangent_ray);
         assert(tangent_result.hit);  // Should intersect at tangent point
         assert(std::abs(tangent_result.t - 5.0f) < 1e-6);  // t should be 5.0
@@ -949,7 +951,7 @@ namespace MathematicalTests {
         std::cout << "  Testing sphere validation..." << std::endl;
         assert(test_sphere.validate_geometry());  // Valid sphere
         
-        Sphere invalid_sphere(Point3(0, 0, 0), -1.0f);  // Negative radius
+        Sphere invalid_sphere(Point3(0, 0, 0), -1.0f, 0);  // Negative radius
         assert(!invalid_sphere.validate_geometry());  // Should be invalid
         
         std::cout << "  Ray-sphere intersection mathematics: PASSED" << std::endl;
@@ -1109,7 +1111,7 @@ namespace MathematicalTests {
         
         // Scene setup
         Ray camera_ray(Point3(0, 0, 0), Vector3(0, 0, -1));
-        Sphere sphere(Point3(0, 0, -2), 0.5f);  // Smaller sphere, closer
+        Sphere sphere(Point3(0, 0, -2), 0.5f, 0);  // Smaller sphere, closer
         LambertMaterial material(Vector3(0.5f, 0.5f, 0.5f));  // 50% gray
         PointLight light(Point3(1, 1, -1), Vector3(1, 1, 1), 4.0f);  // Bright white light
         
@@ -1305,6 +1307,316 @@ namespace MathematicalTests {
         std::cout << "  Command-line integration: PASS" << std::endl;
         return true;
     }
+    
+    // === STORY 2.3 MULTI-PRIMITIVE SCENE VALIDATION TESTS ===
+    
+    bool test_scene_construction_and_management() {
+        std::cout << "\n=== Scene Construction and Management Validation ===" << std::endl;
+        
+        // Test Case 1: Empty scene creation
+        std::cout << "Test 1: Empty scene creation..." << std::endl;
+        Scene empty_scene;
+        assert(empty_scene.primitives.size() == 0);
+        assert(empty_scene.materials.size() == 0);
+        
+        // Test Case 2: Material addition
+        std::cout << "Test 2: Material addition..." << std::endl;
+        LambertMaterial red_material(Vector3(0.7f, 0.3f, 0.3f));
+        int red_idx = empty_scene.add_material(red_material);
+        assert(red_idx == 0);  // First material should have index 0
+        assert(empty_scene.materials.size() == 1);
+        
+        LambertMaterial blue_material(Vector3(0.3f, 0.3f, 0.7f));
+        int blue_idx = empty_scene.add_material(blue_material);
+        assert(blue_idx == 1);  // Second material should have index 1
+        assert(empty_scene.materials.size() == 2);
+        
+        // Test Case 3: Sphere addition with valid material reference
+        std::cout << "Test 3: Sphere addition with valid materials..." << std::endl;
+        Sphere sphere1(Point3(0, 0, -5), 1.0f, red_idx);
+        int sphere1_idx = empty_scene.add_sphere(sphere1);
+        assert(sphere1_idx == 0);  // First sphere should have index 0
+        assert(empty_scene.primitives.size() == 1);
+        
+        Sphere sphere2(Point3(2, 0, -6), 0.8f, blue_idx);
+        int sphere2_idx = empty_scene.add_sphere(sphere2);
+        assert(sphere2_idx == 1);  // Second sphere should have index 1
+        assert(empty_scene.primitives.size() == 2);
+        
+        // Test Case 4: Sphere with invalid material reference
+        std::cout << "Test 4: Sphere with invalid material reference..." << std::endl;
+        Sphere invalid_sphere(Point3(0, 0, 0), 1.0f, 999);  // Invalid material index
+        int invalid_idx = empty_scene.add_sphere(invalid_sphere);
+        assert(invalid_idx == -1);  // Should fail to add
+        assert(empty_scene.primitives.size() == 2);  // Size unchanged
+        
+        std::cout << "  Scene construction and management: PASS" << std::endl;
+        return true;
+    }
+    
+    bool test_multi_primitive_intersection() {
+        std::cout << "\n=== Multi-Primitive Intersection Validation ===" << std::endl;
+        
+        // Setup multi-sphere scene for intersection testing
+        Scene test_scene;
+        
+        // Add materials
+        LambertMaterial red_mat(Vector3(0.7f, 0.3f, 0.3f));
+        LambertMaterial green_mat(Vector3(0.3f, 0.7f, 0.3f));
+        LambertMaterial blue_mat(Vector3(0.3f, 0.3f, 0.7f));
+        
+        int red_idx = test_scene.add_material(red_mat);
+        int green_idx = test_scene.add_material(green_mat);
+        int blue_idx = test_scene.add_material(blue_mat);
+        
+        // Add spheres at different depths
+        Sphere near_sphere(Point3(0, 0, -4), 0.5f, green_idx);   // Closest (z=-3.5 front surface)
+        Sphere middle_sphere(Point3(0, 0, -5), 0.8f, red_idx);   // Middle (z=-4.2 front surface)
+        Sphere far_sphere(Point3(0, 0, -7), 1.0f, blue_idx);    // Farthest (z=-6.0 front surface)
+        
+        test_scene.add_sphere(near_sphere);
+        test_scene.add_sphere(middle_sphere);
+        test_scene.add_sphere(far_sphere);
+        
+        // Test Case 1: Ray hits closest sphere (depth testing)
+        std::cout << "Test 1: Closest hit depth testing..." << std::endl;
+        Ray forward_ray(Point3(0, 0, 0), Vector3(0, 0, -1));
+        Scene::Intersection closest_hit = test_scene.intersect(forward_ray);
+        
+        assert(closest_hit.hit);  // Should intersect
+        
+        // Should hit the green sphere (closest one)
+        bool is_green_material = (std::abs(closest_hit.material->base_color.y - 0.7f) < 1e-5f);
+        assert(is_green_material);
+        std::cout << "  Hit material color: (" << closest_hit.material->base_color.x << ", " 
+                 << closest_hit.material->base_color.y << ", " << closest_hit.material->base_color.z << ")" << std::endl;
+        
+        // Verify t-value corresponds to near sphere
+        float expected_t = 4.0f - 0.5f;  // Distance to center minus radius = 3.5
+        assert(std::abs(closest_hit.t - expected_t) < 1e-4f);
+        std::cout << "  Hit distance t = " << closest_hit.t << " (expected ≈ " << expected_t << ")" << std::endl;
+        
+        // Test Case 2: Ray hits off-center sphere
+        std::cout << "Test 2: Off-center intersection..." << std::endl;
+        Ray offset_ray(Point3(0.3f, 0, 0), Vector3(0, 0, -1));  // Slightly offset ray
+        Scene::Intersection offset_hit = test_scene.intersect(offset_ray);
+        
+        if (offset_hit.hit) {
+            std::cout << "  Off-center hit at t = " << offset_hit.t << std::endl;
+            std::cout << "  Hit point: (" << offset_hit.point.x << ", " << offset_hit.point.y << ", " << offset_hit.point.z << ")" << std::endl;
+        }
+        
+        // Test Case 3: Ray misses all spheres
+        std::cout << "Test 3: Ray miss all spheres..." << std::endl;
+        Ray miss_ray(Point3(5, 5, 0), Vector3(0, 0, -1));  // Ray far from all spheres
+        Scene::Intersection miss_result = test_scene.intersect(miss_ray);
+        assert(!miss_result.hit);  // Should not intersect any sphere
+        
+        // Test Case 4: Performance monitoring verification
+        std::cout << "Test 4: Performance monitoring..." << std::endl;
+        test_scene.reset_statistics();
+        
+        // Generate multiple rays to test performance tracking
+        for (int i = 0; i < 3; i++) {
+            Ray perf_ray(Point3(i * 0.1f, 0, 0), Vector3(0, 0, -1));
+            test_scene.intersect(perf_ray);
+        }
+        
+        std::cout << "  Total intersection tests should be 9 (3 rays × 3 spheres)" << std::endl;
+        assert(test_scene.total_intersection_tests == 9);
+        
+        std::cout << "  Multi-primitive intersection: PASS" << std::endl;
+        return true;
+    }
+    
+    bool test_scene_file_loading() {
+        std::cout << "\n=== Scene File Loading Validation ===" << std::endl;
+        
+        // Test Case 1: Parse scene from string content
+        std::cout << "Test 1: Scene content parsing..." << std::endl;
+        std::string test_scene_content = R"(
+# Test scene for validation
+scene_name: Test Scene
+
+material red_mat 0.8 0.2 0.2
+material green_mat 0.2 0.8 0.2
+material blue_mat 0.2 0.2 0.8
+
+sphere 0.0 0.0 -5.0 1.0 red_mat
+sphere 1.5 0.0 -6.0 0.8 green_mat
+sphere -1.0 1.0 -4.5 0.6 blue_mat
+)";
+        
+        Scene loaded_scene = SceneLoader::load_from_string(test_scene_content);
+        
+        // Verify correct number of materials and primitives
+        assert(loaded_scene.materials.size() == 3);
+        assert(loaded_scene.primitives.size() == 3);
+        
+        // Verify material colors
+        assert(std::abs(loaded_scene.materials[0].base_color.x - 0.8f) < 1e-5f);  // Red material
+        assert(std::abs(loaded_scene.materials[1].base_color.y - 0.8f) < 1e-5f);  // Green material
+        assert(std::abs(loaded_scene.materials[2].base_color.z - 0.8f) < 1e-5f);  // Blue material
+        
+        // Verify sphere positions and materials
+        Sphere& first_sphere = loaded_scene.primitives[0];
+        assert(std::abs(first_sphere.center.z - (-5.0f)) < 1e-5f);
+        assert(first_sphere.radius == 1.0f);
+        assert(first_sphere.material_index == 0);  // Should reference red material
+        
+        // Test Case 2: Ray intersection in loaded scene
+        std::cout << "Test 2: Loaded scene intersection..." << std::endl;
+        Ray test_ray(Point3(0, 0, 0), Vector3(0, 0, -1));
+        Scene::Intersection result = loaded_scene.intersect(test_ray);
+        
+        assert(result.hit);
+        assert(result.material != nullptr);
+        
+        // Should hit the first red sphere
+        bool is_red_material = (std::abs(result.material->base_color.x - 0.8f) < 1e-5f);
+        assert(is_red_material);
+        
+        // Test Case 3: Error handling for invalid content
+        std::cout << "Test 3: Invalid content error handling..." << std::endl;
+        std::string invalid_content = R"(
+invalid_command some parameters
+material invalid_material 2.0 0.5 0.5  # Invalid albedo > 1.0
+sphere 0 0 0 -1.0 nonexistent_material  # Negative radius, invalid material
+)";
+        
+        Scene invalid_scene = SceneLoader::load_from_string(invalid_content);
+        
+        // Should handle errors gracefully and produce usable scene
+        // (specifics depend on error handling implementation)
+        
+        std::cout << "  Scene file loading: PASS" << std::endl;
+        return true;
+    }
+    
+    bool test_intersection_performance_monitoring() {
+        std::cout << "\n=== Intersection Performance Monitoring Validation ===" << std::endl;
+        
+        // Create scene with known number of primitives for testing
+        Scene perf_scene;
+        
+        // Add materials and spheres
+        LambertMaterial test_material(Vector3(0.5f, 0.5f, 0.5f));
+        int mat_idx = perf_scene.add_material(test_material);
+        
+        // Add multiple spheres for performance testing
+        for (int i = 0; i < 5; i++) {
+            Sphere sphere(Point3(i * 2.0f, 0, -5), 0.8f, mat_idx);
+            perf_scene.add_sphere(sphere);
+        }
+        
+        // Test Case 1: Performance counter accuracy
+        std::cout << "Test 1: Performance counter accuracy..." << std::endl;
+        perf_scene.reset_statistics();
+        
+        int num_test_rays = 4;
+        int expected_tests = num_test_rays * perf_scene.primitives.size();
+        
+        for (int i = 0; i < num_test_rays; i++) {
+            Ray test_ray(Point3(-1 + i * 1.0f, 0, 0), Vector3(0, 0, -1));
+            perf_scene.intersect(test_ray);
+        }
+        
+        std::cout << "  Expected intersection tests: " << expected_tests << std::endl;
+        std::cout << "  Actual intersection tests: " << perf_scene.total_intersection_tests << std::endl;
+        assert(perf_scene.total_intersection_tests == expected_tests);
+        
+        // Test Case 2: Hit rate calculation
+        std::cout << "Test 2: Hit rate calculation..." << std::endl;
+        assert(perf_scene.successful_intersections <= perf_scene.total_intersection_tests);
+        
+        float hit_rate = (float)perf_scene.successful_intersections / perf_scene.total_intersection_tests * 100.0f;
+        std::cout << "  Hit rate: " << hit_rate << "%" << std::endl;
+        assert(hit_rate >= 0.0f && hit_rate <= 100.0f);
+        
+        // Test Case 3: Timing accuracy (basic validation)
+        std::cout << "Test 3: Timing accuracy validation..." << std::endl;
+        assert(perf_scene.total_intersection_time_ms >= 0.0f);  // Should be non-negative
+        
+        if (perf_scene.total_intersection_tests > 0) {
+            float avg_time = perf_scene.total_intersection_time_ms / perf_scene.total_intersection_tests;
+            std::cout << "  Average time per test: " << avg_time << "ms" << std::endl;
+            assert(avg_time >= 0.0f);  // Should be non-negative
+        }
+        
+        std::cout << "  Performance monitoring: PASS" << std::endl;
+        return true;
+    }
+    
+    bool test_scene_validation_and_edge_cases() {
+        std::cout << "\n=== Scene Validation and Edge Cases ===" << std::endl;
+        
+        // Test Case 1: Scene with invalid spheres
+        std::cout << "Test 1: Invalid sphere rejection..." << std::endl;
+        Scene validation_scene;
+        
+        LambertMaterial valid_material(Vector3(0.5f, 0.5f, 0.5f));
+        int mat_idx = validation_scene.add_material(valid_material);
+        
+        // Try to add sphere with negative radius
+        Sphere invalid_sphere(Point3(0, 0, -5), -1.0f, mat_idx);
+        int invalid_result = validation_scene.add_sphere(invalid_sphere);
+        assert(invalid_result == -1);  // Should reject invalid sphere
+        assert(validation_scene.primitives.size() == 0);
+        
+        // Add valid sphere
+        Sphere valid_sphere(Point3(0, 0, -5), 1.0f, mat_idx);
+        int valid_result = validation_scene.add_sphere(valid_sphere);
+        assert(valid_result == 0);  // Should accept valid sphere
+        assert(validation_scene.primitives.size() == 1);
+        
+        // Test Case 2: Material energy conservation validation
+        std::cout << "Test 2: Material energy conservation..." << std::endl;
+        Scene energy_scene;
+        
+        LambertMaterial valid_energy_material(Vector3(0.9f, 0.9f, 0.9f));
+        assert(valid_energy_material.validate_energy_conservation());
+        
+        LambertMaterial invalid_energy_material(Vector3(1.5f, 0.8f, 0.6f));
+        assert(!invalid_energy_material.validate_energy_conservation());
+        
+        // Scene should accept materials regardless of energy conservation for educational purposes
+        // but warn about violations
+        int valid_energy_idx = energy_scene.add_material(valid_energy_material);
+        int invalid_energy_idx = energy_scene.add_material(invalid_energy_material);
+        assert(valid_energy_idx >= 0);
+        assert(invalid_energy_idx >= 0);
+        assert(energy_scene.materials.size() == 2);
+        
+        // Test Case 3: Empty scene intersection
+        std::cout << "Test 3: Empty scene intersection..." << std::endl;
+        Scene empty_scene;
+        Ray test_ray(Point3(0, 0, 0), Vector3(0, 0, -1));
+        Scene::Intersection empty_result = empty_scene.intersect(test_ray);
+        assert(!empty_result.hit);  // Should not intersect anything
+        assert(empty_result.material == nullptr);
+        assert(empty_result.primitive == nullptr);
+        
+        // Test Case 4: Self-intersection avoidance
+        std::cout << "Test 4: Self-intersection avoidance..." << std::endl;
+        Scene self_test_scene;
+        LambertMaterial self_material(Vector3(0.5f, 0.5f, 0.5f));
+        int self_mat_idx = self_test_scene.add_material(self_material);
+        
+        Sphere self_sphere(Point3(0, 0, -5), 1.0f, self_mat_idx);
+        self_test_scene.add_sphere(self_sphere);
+        
+        // Ray starting very close to sphere surface (should avoid self-intersection)
+        Ray surface_ray(Point3(0, 0, -4.001f), Vector3(0, 0, -1));  // Just inside epsilon threshold
+        Scene::Intersection surface_result = self_test_scene.intersect(surface_ray);
+        
+        if (surface_result.hit) {
+            // If it hits, t should be reasonably large (not tiny due to self-intersection)
+            assert(surface_result.t > 0.001f);  // Greater than epsilon threshold
+        }
+        
+        std::cout << "  Scene validation and edge cases: PASS" << std::endl;
+        return true;
+    }
 }
 
 int main() {
@@ -1354,6 +1666,14 @@ int main() {
         all_passed &= MathematicalTests::test_camera_fov_validation();
         all_passed &= MathematicalTests::test_camera_edge_cases();
         all_passed &= MathematicalTests::test_camera_command_line_integration();
+        
+        // === STORY 2.3 MULTI-PRIMITIVE SCENE VALIDATION TESTS ===
+        std::cout << "\n=== Story 2.3 Multi-Primitive Scene Management Validation Tests ===" << std::endl;
+        all_passed &= MathematicalTests::test_scene_construction_and_management();
+        all_passed &= MathematicalTests::test_multi_primitive_intersection();
+        all_passed &= MathematicalTests::test_scene_file_loading();
+        all_passed &= MathematicalTests::test_intersection_performance_monitoring();
+        all_passed &= MathematicalTests::test_scene_validation_and_edge_cases();
         
         if (all_passed) {
             std::cout << "\n✅ ALL MATHEMATICAL TESTS PASSED" << std::endl;

@@ -11,12 +11,17 @@
 // Ray tracing usage: fundamental primitive for rendering spherical objects
 class Sphere {
 public:
-    Point3 center;  // Center point of sphere in 3D space
-    float radius;   // Radius distance from center to surface
+    Point3 center;      // Center point of sphere in 3D space
+    float radius;       // Radius distance from center to surface
+    int material_index; // Index into Scene's materials vector for material properties
 
-    // Constructor with explicit center point and radius
+    // Constructor with explicit center point, radius, and material index
     // Geometric interpretation: defines sphere as locus of points at radius distance from center
-    Sphere(const Point3& center, float radius) : center(center), radius(radius) {}
+    // Material reference: enables material property lookup in Scene's materials container
+    Sphere(const Point3& center, float radius, int material_idx) 
+        : center(center), radius(radius), material_index(material_idx) {
+        validate_and_clamp_parameters();
+    }
 
     // Intersection result structure containing all intersection information
     // hit: whether ray intersects sphere (discriminant ≥ 0 and t > 0)
@@ -217,5 +222,120 @@ public:
     // Usage: mathematical verification and debugging
     float volume() const {
         return (4.0f / 3.0f) * M_PI * radius * radius * radius;
+    }
+
+    // Enhanced validation for sphere parameters including material index
+    // Checks: finite center coordinates, positive radius, valid material index
+    bool is_valid() const {
+        bool center_finite = std::isfinite(center.x) && std::isfinite(center.y) && std::isfinite(center.z);
+        bool radius_valid = radius > 0.0f && radius < 1000.0f && std::isfinite(radius);
+        bool material_valid = material_index >= 0;
+        
+        if (!center_finite) {
+            std::cout << "Invalid sphere: center coordinates must be finite" << std::endl;
+        }
+        if (!radius_valid) {
+            std::cout << "Invalid sphere: radius must be positive, finite, and < 1000, got " << radius << std::endl;
+        }
+        if (!material_valid) {
+            std::cout << "Invalid sphere: material index must be >= 0, got " << material_index << std::endl;
+        }
+        
+        return center_finite && radius_valid && material_valid;
+    }
+    
+    // Parameter validation and clamping for robust sphere construction
+    // Ensures sphere parameters are within valid mathematical ranges
+    void validate_and_clamp_parameters() {
+        std::cout << "\n=== Sphere Parameter Validation ===" << std::endl;
+        std::cout << "Original parameters:" << std::endl;
+        std::cout << "  Center: (" << center.x << ", " << center.y << ", " << center.z << ")" << std::endl;
+        std::cout << "  Radius: " << radius << std::endl;
+        std::cout << "  Material index: " << material_index << std::endl;
+        
+        // Validate and fix center coordinates
+        if (!std::isfinite(center.x) || !std::isfinite(center.y) || !std::isfinite(center.z)) {
+            std::cout << "WARNING: Invalid sphere center coordinates, setting to origin" << std::endl;
+            center = Point3(0, 0, 0);
+        }
+        
+        // Validate and clamp radius
+        if (radius <= 0.0f) {
+            std::cout << "WARNING: Invalid sphere radius " << radius << ", clamping to 0.1" << std::endl;
+            radius = 0.1f;
+        } else if (radius > 1000.0f) {
+            std::cout << "WARNING: Very large sphere radius " << radius << ", clamping to 1000.0" << std::endl;
+            radius = 1000.0f;
+        } else if (!std::isfinite(radius)) {
+            std::cout << "WARNING: Non-finite sphere radius, setting to 1.0" << std::endl;
+            radius = 1.0f;
+        }
+        
+        // Validate material index (cannot fix here as we don't know scene materials)
+        if (material_index < 0) {
+            std::cout << "WARNING: Negative material index " << material_index << ", setting to 0" << std::endl;
+            material_index = 0;
+        }
+        
+        std::cout << "Validated parameters:" << std::endl;
+        std::cout << "  Center: (" << center.x << ", " << center.y << ", " << center.z << ")" << std::endl;
+        std::cout << "  Radius: " << radius << std::endl;
+        std::cout << "  Material index: " << material_index << std::endl;
+        std::cout << "=== Parameter validation complete ===" << std::endl;
+    }
+    
+    // Educational method: explain intersection mathematics step-by-step
+    // Provides detailed explanation of ray-sphere intersection algorithm
+    void explain_intersection_math(const Ray& ray) const {
+        std::cout << "\n=== Educational: Ray-Sphere Intersection Mathematics ===" << std::endl;
+        std::cout << "Sphere equation: |P - C|² = r²" << std::endl;
+        std::cout << "Ray equation: P(t) = O + t*D" << std::endl;
+        std::cout << "Where: P=point, C=center, r=radius, O=origin, D=direction, t=parameter" << std::endl;
+        
+        std::cout << "\nSubstituting ray into sphere equation:" << std::endl;
+        std::cout << "|O + t*D - C|² = r²" << std::endl;
+        std::cout << "|oc + t*D|² = r²  (where oc = O - C)" << std::endl;
+        std::cout << "(oc + t*D)·(oc + t*D) = r²" << std::endl;
+        std::cout << "oc·oc + 2t(oc·D) + t²(D·D) = r²" << std::endl;
+        std::cout << "(D·D)t² + 2(oc·D)t + (oc·oc - r²) = 0" << std::endl;
+        
+        Vector3 oc = ray.origin - center;
+        float a = ray.direction.dot(ray.direction);
+        float b = 2.0f * oc.dot(ray.direction);
+        float c = oc.dot(oc) - radius * radius;
+        
+        std::cout << "\nFor current ray and sphere:" << std::endl;
+        std::cout << "a = D·D = " << a << std::endl;
+        std::cout << "b = 2(oc·D) = " << b << std::endl;
+        std::cout << "c = oc·oc - r² = " << c << std::endl;
+        
+        float discriminant = b * b - 4 * a * c;
+        std::cout << "discriminant = b² - 4ac = " << discriminant << std::endl;
+        
+        if (discriminant < 0) {
+            std::cout << "Result: No intersection (discriminant < 0)" << std::endl;
+        } else if (discriminant == 0) {
+            std::cout << "Result: Tangent intersection (discriminant = 0)" << std::endl;
+        } else {
+            std::cout << "Result: Two intersections (discriminant > 0)" << std::endl;
+            float sqrt_d = std::sqrt(discriminant);
+            float t1 = (-b - sqrt_d) / (2 * a);
+            float t2 = (-b + sqrt_d) / (2 * a);
+            std::cout << "t1 = " << t1 << ", t2 = " << t2 << std::endl;
+        }
+        
+        std::cout << "=== Mathematical explanation complete ===" << std::endl;
+    }
+    
+    // Print sphere properties for educational and debugging purposes
+    void print_sphere_properties() const {
+        std::cout << "\n=== Sphere Properties ===" << std::endl;
+        std::cout << "Center: (" << center.x << ", " << center.y << ", " << center.z << ")" << std::endl;
+        std::cout << "Radius: " << radius << std::endl;
+        std::cout << "Material index: " << material_index << std::endl;
+        std::cout << "Surface area: " << surface_area() << std::endl;
+        std::cout << "Volume: " << volume() << std::endl;
+        std::cout << "Geometry valid: " << (is_valid() ? "YES" : "NO") << std::endl;
+        std::cout << "=== Properties display complete ===" << std::endl;
     }
 };
