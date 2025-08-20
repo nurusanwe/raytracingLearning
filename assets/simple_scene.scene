@@ -1,0 +1,26 @@
+# Simple Scene Format for Multi-Primitive Ray Tracing
+# Educational scene file demonstrating multiple spheres with different materials
+# Format: Key-value pairs with educational comments
+
+# Scene Configuration
+scene_name: Multi-Sphere Test Scene
+description: Three spheres with Lambert materials for intersection testing
+
+# Materials Section
+# Format: material_name red green blue
+material red_sphere 0.7 0.3 0.3
+material blue_sphere 0.3 0.3 0.7
+material green_sphere 0.3 0.7 0.3
+
+# Spheres Section  
+# Format: sphere center_x center_y center_z radius material_name
+sphere 0.0 0.0 -5.0 1.0 red_sphere
+sphere 2.0 0.0 -6.0 0.8 blue_sphere
+sphere -1.5 1.0 -4.0 0.6 green_sphere
+
+# Educational Notes:
+# - Red sphere: Large central sphere for primary intersection testing
+# - Blue sphere: Offset sphere to test closest-hit logic
+# - Green sphere: Smaller sphere at different depth for depth testing
+# - All spheres positioned in front of camera (negative Z) for visibility
+# - Different radii to test intersection algorithm with varied sphere sizes

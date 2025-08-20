@@ -4,6 +4,8 @@
 #include "core/point3.hpp"
 #include "core/ray.hpp"
 #include "core/sphere.hpp"
+#include "core/scene.hpp"
+#include "core/scene_loader.hpp"
 #include "core/point_light.hpp"
 #include "materials/lambert.hpp"
 #include "core/camera.hpp"
@@ -27,7 +29,28 @@ int main(int argc, char* argv[]) {
     for (int i = 1; i < argc; i++) {
         if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
             Camera::print_command_line_help();
+            std::cout << "\n=== Multi-Primitive Scene Management Help ===" << std::endl;
+            std::cout << "Additional parameters for Story 2.3:" << std::endl;
+            std::cout << "--scene <filename>    Load scene from file (default: assets/simple_scene.scene)" << std::endl;
+            std::cout << "--no-scene            Use hardcoded single sphere for compatibility" << std::endl;
+            std::cout << "\nScene file format:" << std::endl;
+            std::cout << "material <name> <r> <g> <b>  - Define material with RGB albedo" << std::endl;
+            std::cout << "sphere <x> <y> <z> <radius> <material>  - Add sphere to scene" << std::endl;
             return 0;
+        }
+    }
+    
+    // Check for scene file parameter
+    std::string scene_filename = "assets/simple_scene.scene";  // Default scene
+    bool use_scene_file = true;
+    
+    for (int i = 1; i < argc - 1; i++) {
+        if (std::strcmp(argv[i], "--scene") == 0) {
+            scene_filename = argv[i + 1];
+            std::cout << "Scene file override: " << scene_filename << std::endl;
+        } else if (std::strcmp(argv[i], "--no-scene") == 0) {
+            use_scene_file = false;
+            std::cout << "Scene loading disabled - using hardcoded sphere" << std::endl;
         }
     }
     
@@ -50,7 +73,7 @@ int main(int argc, char* argv[]) {
     // Expected: intersection at (0,0,-4) with discriminant = 16.0
     std::cout << "\n--- Test Case 1: Known Intersection ---" << std::endl;
     Ray test_ray(Point3(0, 0, 0), Vector3(0, 0, -1));  // Ray pointing down negative Z-axis
-    Sphere test_sphere(Point3(0, 0, -5), 1.0f);        // Sphere centered at (0,0,-5) with radius 1
+    Sphere test_sphere(Point3(0, 0, -5), 1.0f, 0);     // Sphere centered at (0,0,-5) with radius 1, material index 0
     
     // Validate sphere geometry
     if (!test_sphere.validate_geometry()) {
@@ -125,7 +148,7 @@ int main(int argc, char* argv[]) {
     // Test Case 4: Grazing ray (tangent to sphere)
     std::cout << "\n--- Test Case 4: Grazing Ray (Tangent to Sphere) ---" << std::endl;
     Ray graze_ray(Point3(1, 0, 0), Vector3(0, 0, -1));    // Ray tangent to sphere at x=radius
-    Sphere unit_sphere(Point3(0, 0, -5), 1.0f);           // Unit sphere for tangency test
+    Sphere unit_sphere(Point3(0, 0, -5), 1.0f, 0);        // Unit sphere for tangency test, material index 0
     Sphere::Intersection graze_result = unit_sphere.intersect(graze_ray);
     
     if (graze_result.hit) {
@@ -137,6 +160,91 @@ int main(int argc, char* argv[]) {
     
     std::cout << "\n=== Ray-Sphere Intersection Implementation Complete ===" << std::endl;
     std::cout << "All edge cases handled successfully" << std::endl;
+    
+    std::cout << "\n=== Story 2.3: Multi-Primitive Scene Management Testing ===" << std::endl;
+    
+    // Test Scene-based intersection with multiple spheres
+    std::cout << "\n--- Multi-Sphere Scene Construction ---" << std::endl;
+    Scene test_scene;
+    
+    // Add materials to scene
+    LambertMaterial red_material(Vector3(0.7f, 0.3f, 0.3f));
+    LambertMaterial blue_material(Vector3(0.3f, 0.3f, 0.7f));
+    LambertMaterial green_material(Vector3(0.3f, 0.7f, 0.3f));
+    
+    int red_mat_idx = test_scene.add_material(red_material);
+    int blue_mat_idx = test_scene.add_material(blue_material);
+    int green_mat_idx = test_scene.add_material(green_material);
+    
+    // Add spheres to scene (using new constructor with material index)
+    Sphere sphere1(Point3(0.0f, 0.0f, -5.0f), 1.0f, red_mat_idx);     // Central red sphere
+    Sphere sphere2(Point3(2.0f, 0.0f, -6.0f), 0.8f, blue_mat_idx);    // Blue sphere to the right
+    Sphere sphere3(Point3(-1.5f, 1.0f, -4.0f), 0.6f, green_mat_idx);  // Green sphere upper left
+    
+    int sphere1_idx = test_scene.add_sphere(sphere1);
+    int sphere2_idx = test_scene.add_sphere(sphere2);
+    int sphere3_idx = test_scene.add_sphere(sphere3);
+    
+    test_scene.print_scene_statistics();
+    
+    // Test Case 1: Ray hits central sphere (should be closest)
+    std::cout << "\n--- Test Case 1: Ray Hits Central Sphere (Closest Hit Logic) ---" << std::endl;
+    Ray central_ray(Point3(0, 0, 0), Vector3(0, 0, -1));  // Ray toward central sphere
+    Scene::Intersection scene_hit = test_scene.intersect(central_ray);
+    
+    if (scene_hit.hit) {
+        std::cout << "✓ Scene intersection found" << std::endl;
+        std::cout << "✓ Hit distance: t = " << scene_hit.t << std::endl;
+        std::cout << "✓ Hit primitive: sphere at (" << scene_hit.primitive->center.x 
+                 << ", " << scene_hit.primitive->center.y << ", " << scene_hit.primitive->center.z << ")" << std::endl;
+        std::cout << "✓ Material color: (" << scene_hit.material->base_color.x 
+                 << ", " << scene_hit.material->base_color.y << ", " << scene_hit.material->base_color.z << ")" << std::endl;
+        
+        // Verify it hit the central red sphere (closest at z=-4)
+        float expected_t = 4.0f;  // Ray from origin to sphere at z=-5 with radius 1
+        if (std::abs(scene_hit.t - expected_t) < 1e-5f) {
+            std::cout << "✓ Closest hit validation: PASSED (hit central sphere as expected)" << std::endl;
+        } else {
+            std::cout << "✗ Closest hit validation: FAILED (expected t=" << expected_t << ", got t=" << scene_hit.t << ")" << std::endl;
+        }
+    } else {
+        std::cout << "✗ ERROR: Expected scene intersection but none found!" << std::endl;
+    }
+    
+    // Test Case 2: Ray hits multiple spheres (closest hit logic)
+    std::cout << "\n--- Test Case 2: Ray Through Multiple Spheres (Depth Testing) ---" << std::endl;
+    Ray multi_ray(Point3(-1.5f, 1.0f, 0), Vector3(0, 0, -1));  // Ray toward green sphere
+    Scene::Intersection multi_hit = test_scene.intersect(multi_ray);
+    
+    if (multi_hit.hit) {
+        std::cout << "✓ Multi-sphere ray intersection found" << std::endl;
+        std::cout << "✓ Closest hit distance: t = " << multi_hit.t << std::endl;
+        std::cout << "✓ Should hit green sphere (closest at z=-4)" << std::endl;
+        
+        // Check if it's the green material (should be closest)
+        bool is_green = (std::abs(multi_hit.material->base_color.y - 0.7f) < 1e-5f);
+        if (is_green) {
+            std::cout << "✓ Depth testing validation: PASSED (hit closest green sphere)" << std::endl;
+        } else {
+            std::cout << "✗ Depth testing validation: FAILED (hit wrong sphere)" << std::endl;
+        }
+    } else {
+        std::cout << "✗ ERROR: Expected multi-sphere intersection but none found!" << std::endl;
+    }
+    
+    // Test Case 3: Educational performance monitoring
+    std::cout << "\n--- Test Case 3: Performance Monitoring Validation ---" << std::endl;
+    test_scene.reset_statistics();
+    
+    // Generate several rays to test performance tracking
+    for (int i = 0; i < 5; i++) {
+        Ray perf_ray(Point3(-2 + i * 1.0f, 0, 0), Vector3(0, 0, -1));
+        test_scene.intersect(perf_ray);
+    }
+    
+    std::cout << "Performance monitoring test complete - statistics should show 15 intersection tests (5 rays × 3 spheres)" << std::endl;
+    
+    std::cout << "\n=== Multi-Primitive Scene Management Complete ===" << std::endl;
     
     std::cout << "\n=== Story 1.3: Lambert BRDF Material Validation ===" << std::endl;
     
@@ -236,8 +344,8 @@ int main(int argc, char* argv[]) {
     // Sphere at (0,0,-5) with radius 1.0 and Lambert material
     Point3 sphere_center(0, 0, -5);
     float sphere_radius = 1.0f;
-    Sphere render_sphere(sphere_center, sphere_radius);
     LambertMaterial sphere_material(Vector3(0.7f, 0.3f, 0.3f));  // Reddish diffuse material
+    Sphere render_sphere(sphere_center, sphere_radius, 0);       // Material index 0 (will be ignored in this test)
     std::cout << "Sphere center: (" << sphere_center.x << ", " << sphere_center.y << ", " << sphere_center.z << ")" << std::endl;
     std::cout << "Sphere radius: " << sphere_radius << std::endl;
     std::cout << "Sphere material albedo: (" << sphere_material.base_color.x << ", " << sphere_material.base_color.y << ", " << sphere_material.base_color.z << ")" << std::endl;
@@ -311,7 +419,7 @@ int main(int argc, char* argv[]) {
     
     // Educational summary of complete light transport
     std::cout << "\n--- Complete Light Transport Summary ---" << std::endl;
-    std::cout << "1. Camera ray traced to sphere intersection point" << std::endl;
+    std::cout << "1. Camera ray traced to scene intersection point" << std::endl;
     std::cout << "2. Point light irradiance calculated with inverse square law" << std::endl;
     std::cout << "3. Lambert BRDF evaluated for diffuse reflection" << std::endl;
     std::cout << "4. Cosine term (n·l) applied for surface orientation" << std::endl;
@@ -358,15 +466,34 @@ int main(int argc, char* argv[]) {
     render_camera.print_camera_parameters();
     render_camera.explain_coordinate_transformation();
     
-    // Scene setup (adjusted sphere position to be in camera view)
-    Sphere image_sphere(Point3(0, 0, -3), 1.0f);  // Sphere positioned in camera field of view
-    LambertMaterial image_material(Vector3(0.7f, 0.3f, 0.3f));  // Reddish diffuse
+    // Scene setup: load from file or create default scene
+    Scene render_scene;
     PointLight image_light(Point3(2, 2, -3), Vector3(1.0f, 1.0f, 1.0f), 10.0f);
     
     std::cout << "\n--- Scene Configuration ---" << std::endl;
-    std::cout << "Sphere center: (" << image_sphere.center.x << ", " << image_sphere.center.y << ", " << image_sphere.center.z << ")" << std::endl;
-    std::cout << "Sphere radius: " << image_sphere.radius << std::endl;
-    std::cout << "Material albedo: (" << image_material.base_color.x << ", " << image_material.base_color.y << ", " << image_material.base_color.z << ")" << std::endl;
+    
+    if (use_scene_file) {
+        std::cout << "Loading scene from file: " << scene_filename << std::endl;
+        render_scene = SceneLoader::load_from_file(scene_filename);
+        
+        if (render_scene.primitives.empty()) {
+            std::cout << "WARNING: Scene loading failed or produced empty scene, creating default sphere" << std::endl;
+            use_scene_file = false;
+        } else {
+            std::cout << "✓ Scene loaded successfully" << std::endl;
+            render_scene.print_scene_statistics();
+        }
+    }
+    
+    if (!use_scene_file) {
+        std::cout << "Creating default single-sphere scene for compatibility" << std::endl;
+        // Fallback to single sphere for backwards compatibility
+        LambertMaterial default_material(Vector3(0.7f, 0.3f, 0.3f));  // Reddish diffuse
+        int material_idx = render_scene.add_material(default_material);
+        Sphere default_sphere(Point3(0, 0, -3), 1.0f, material_idx);
+        render_scene.add_sphere(default_sphere);
+        render_scene.print_scene_statistics();
+    }
     
     // Image buffer creation
     Image output_image(image_width, image_height);
@@ -408,14 +535,14 @@ int main(int argc, char* argv[]) {
             rays_generated++;
             
             
-            // Test ray-sphere intersection
-            Sphere::Intersection intersection = image_sphere.intersect(pixel_ray);
+            // Test ray-scene intersection (multiple primitives)
+            Scene::Intersection intersection = render_scene.intersect(pixel_ray);
             intersection_tests++;
             
             Vector3 pixel_color(0, 0, 0);  // Default background color (black)
             
             if (intersection.hit) {
-                // Sphere intersection found - calculate lighting
+                // Scene intersection found - calculate lighting
                 shading_calculations++;
                 
                 // Light evaluation
@@ -425,8 +552,8 @@ int main(int argc, char* argv[]) {
                 // View direction (from surface to camera)
                 Vector3 view_direction = (camera_position - intersection.point).normalize();
                 
-                // Complete light transport using Lambert BRDF
-                pixel_color = image_material.scatter_light(
+                // Complete light transport using material's Lambert BRDF
+                pixel_color = intersection.material->scatter_light(
                     light_direction, 
                     view_direction, 
                     intersection.normal, 
@@ -464,6 +591,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Intersection Testing Statistics:" << std::endl;
     std::cout << "  Total intersection tests: " << intersection_tests << std::endl;
     std::cout << "  Tests per ray: " << (static_cast<float>(intersection_tests) / rays_generated) << std::endl;
+    std::cout << "  Scene primitives tested: " << render_scene.primitives.size() << " per ray" << std::endl;
     
     std::cout << "Shading Calculation Statistics:" << std::endl;
     std::cout << "  Shading calculations performed: " << shading_calculations << std::endl;
@@ -487,10 +615,15 @@ int main(int argc, char* argv[]) {
     
     std::cout << "\n--- Multi-Ray Pipeline Summary ---" << std::endl;
     std::cout << "1. Camera-to-pixel coordinate transformation: " << rays_generated << " rays generated" << std::endl;
-    std::cout << "2. Ray-sphere intersection testing: " << intersection_tests << " tests performed" << std::endl;
+    std::cout << "2. Ray-scene intersection testing: " << intersection_tests << " tests performed across " 
+              << render_scene.primitives.size() << " primitives" << std::endl;
     std::cout << "3. Lambert BRDF shading calculations: " << shading_calculations << " evaluations" << std::endl;
     std::cout << "4. Image buffer management: " << (image_width * image_height) << " pixels stored" << std::endl;
     std::cout << "5. Color management pipeline: clamping and gamma correction ready" << std::endl;
+    
+    // Display final scene performance statistics
+    std::cout << "\n=== Final Scene Performance Statistics ===" << std::endl;
+    render_scene.print_scene_statistics();
     
     std::cout << "\n=== Image Generation and Pixel Sampling Complete ===" << std::endl;
     std::cout << "Successfully generated " << image_width << "×" << image_height << " image" << std::endl;
