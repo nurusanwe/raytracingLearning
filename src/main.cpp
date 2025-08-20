@@ -1,4 +1,5 @@
 #include <iostream>
+#include <cstring>
 #include "core/vector3.hpp"
 #include "core/point3.hpp"
 #include "core/ray.hpp"
@@ -21,7 +22,15 @@
     constexpr const char* PLATFORM_NAME = "Unknown";
 #endif
 
-int main() {
+int main(int argc, char* argv[]) {
+    // Check for help request
+    for (int i = 1; i < argc; i++) {
+        if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
+            Camera::print_command_line_help();
+            return 0;
+        }
+    }
+    
     std::cout << "=== Educational Ray Tracer - Epic 1 Foundation ===" << std::endl;
     std::cout << "Platform: " << PLATFORM_NAME << std::endl;
     std::cout << "C++ Standard: " << __cplusplus << std::endl;
@@ -335,6 +344,9 @@ int main() {
     float aspect_ratio = static_cast<float>(image_width) / image_height;
     
     Camera render_camera(camera_position, camera_target, camera_up, camera_fov, aspect_ratio);
+    
+    // Apply command-line arguments to override default camera parameters
+    render_camera.set_from_command_line_args(argc, argv);
     
     // Validate camera configuration
     if (!render_camera.validate_camera()) {
