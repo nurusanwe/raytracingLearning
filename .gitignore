@@ -62,3 +62,9 @@ Testing/
 
 # Log files
 *.log
+
+# Language server cache (clangd, etc.)
+.cache/
+
+# Output images
+raytracer_output.png

@@ -275,4 +275,157 @@ public:
         total_intersection_time_ms = 0.0f;
         std::cout << "Scene performance statistics reset" << std::endl;
     }
+
+    // Memory usage monitoring methods for educational analysis
+    
+    // Calculate total memory usage of scene data (primitives and materials)
+    size_t calculate_scene_memory_usage() const {
+        size_t total_bytes = 0;
+        
+        // Memory used by sphere primitives
+        total_bytes += primitives.size() * sizeof(Sphere);
+        
+        // Memory used by materials
+        total_bytes += materials.size() * sizeof(LambertMaterial);
+        
+        // Memory used by containers (approximate)
+        total_bytes += primitives.capacity() * sizeof(Sphere) - primitives.size() * sizeof(Sphere);
+        total_bytes += materials.capacity() * sizeof(LambertMaterial) - materials.size() * sizeof(LambertMaterial);
+        
+        return total_bytes;
+    }
+    
+    // Print comprehensive memory usage analysis with educational explanations
+    void print_memory_usage_analysis() const {
+        std::cout << "\n=== Scene Memory Usage Analysis ===" << std::endl;
+        
+        size_t sphere_memory = primitives.size() * sizeof(Sphere);
+        size_t material_memory = materials.size() * sizeof(LambertMaterial);
+        size_t container_overhead = (primitives.capacity() - primitives.size()) * sizeof(Sphere) +
+                                   (materials.capacity() - materials.size()) * sizeof(LambertMaterial);
+        size_t total_scene_memory = calculate_scene_memory_usage();
+        
+        std::cout << "Scene Data Memory Breakdown:" << std::endl;
+        std::cout << "  Spheres: " << primitives.size() << " × " << sizeof(Sphere) 
+                  << " bytes = " << sphere_memory << " bytes" << std::endl;
+        std::cout << "  Materials: " << materials.size() << " × " << sizeof(LambertMaterial) 
+                  << " bytes = " << material_memory << " bytes" << std::endl;
+        std::cout << "  Container overhead: " << container_overhead << " bytes" << std::endl;
+        std::cout << "  Total scene memory: " << total_scene_memory << " bytes ("
+                  << (total_scene_memory / 1024.0f) << " KB)" << std::endl;
+        
+        // Educational insights about memory scaling
+        std::cout << "\nMemory Scaling Analysis:" << std::endl;
+        if (primitives.size() > 0) {
+            float bytes_per_sphere = static_cast<float>(sphere_memory) / primitives.size();
+            std::cout << "  Memory per sphere: " << bytes_per_sphere << " bytes" << std::endl;
+            std::cout << "  Linear scaling: O(n) where n = number of spheres" << std::endl;
+            
+            if (primitives.size() > 1000) {
+                std::cout << "  NOTE: Large primitive count may impact intersection performance" << std::endl;
+                std::cout << "  Consider spatial acceleration structures for complex scenes" << std::endl;
+            }
+        }
+        
+        if (materials.size() > 0) {
+            float bytes_per_material = static_cast<float>(material_memory) / materials.size();
+            std::cout << "  Memory per material: " << bytes_per_material << " bytes" << std::endl;
+            std::cout << "  Material memory is typically small compared to geometry" << std::endl;
+        }
+        
+        // Memory efficiency analysis
+        std::cout << "\nMemory Efficiency:" << std::endl;
+        if (container_overhead > total_scene_memory * 0.5f) {
+            std::cout << "  WARNING: High container overhead (" << (container_overhead * 100.0f / total_scene_memory) 
+                      << "% of total)" << std::endl;
+            std::cout << "  Consider using reserve() or shrink_to_fit() to optimize memory" << std::endl;
+        } else {
+            std::cout << "  Container overhead: " << (container_overhead * 100.0f / total_scene_memory) 
+                      << "% (reasonable)" << std::endl;
+        }
+        
+        std::cout << "=== End Scene Memory Analysis ===" << std::endl;
+    }
+    
+    // Memory usage warnings for educational guidance
+    void check_memory_usage_warnings(size_t image_memory_bytes = 0) const {
+        size_t scene_memory = calculate_scene_memory_usage();
+        size_t total_memory = scene_memory + image_memory_bytes;
+        
+        std::cout << "\n=== Memory Usage Warnings ===" << std::endl;
+        
+        // Convert to MB for easier understanding
+        float scene_mb = scene_memory / (1024.0f * 1024.0f);
+        float image_mb = image_memory_bytes / (1024.0f * 1024.0f);
+        float total_mb = total_memory / (1024.0f * 1024.0f);
+        
+        std::cout << "Memory Usage Summary:" << std::endl;
+        std::cout << "  Scene data: " << scene_mb << " MB" << std::endl;
+        std::cout << "  Image buffer: " << image_mb << " MB" << std::endl;
+        std::cout << "  Total memory: " << total_mb << " MB" << std::endl;
+        
+        // Educational warnings based on memory usage
+        if (total_mb > 100.0f) {
+            std::cout << "\n⚠️  WARNING: High memory usage detected!" << std::endl;
+            std::cout << "Educational guidance:" << std::endl;
+            std::cout << "  - Total memory exceeds 100MB threshold" << std::endl;
+            std::cout << "  - Consider smaller image resolutions for educational experiments" << std::endl;
+            std::cout << "  - Large memory usage may impact system performance" << std::endl;
+            
+            if (image_mb > scene_mb * 10) {
+                std::cout << "  - Image buffer dominates memory usage (reduce resolution)" << std::endl;
+            }
+            if (scene_mb > 10.0f) {
+                std::cout << "  - Scene complexity is high (consider simpler scenes)" << std::endl;
+            }
+        } else if (total_mb > 50.0f) {
+            std::cout << "\n🔶 NOTICE: Moderate memory usage" << std::endl;
+            std::cout << "Educational note: Memory usage is reasonable for learning purposes" << std::endl;
+        } else {
+            std::cout << "\n✅ Memory usage is optimal for educational ray tracing" << std::endl;
+        }
+        
+        // Quadratic scaling educational explanation
+        if (image_mb > 1.0f) {
+            std::cout << "\nEducational Insight - Memory Scaling:" << std::endl;
+            std::cout << "  - Image memory scales quadratically: O(width × height)" << std::endl;
+            std::cout << "  - Doubling resolution (e.g., 512→1024) quadruples memory" << std::endl;
+            std::cout << "  - This demonstrates why memory management is crucial in graphics" << std::endl;
+        }
+        
+        std::cout << "=== End Memory Warnings ===" << std::endl;
+    }
+    
+    // Show relationship between scene complexity and memory requirements
+    void explain_memory_scene_relationship() const {
+        std::cout << "\n=== Educational: Memory-Scene Relationship ===" << std::endl;
+        
+        size_t primitive_memory = primitives.size() * sizeof(Sphere);
+        size_t material_memory = materials.size() * sizeof(LambertMaterial);
+        
+        std::cout << "Scene Complexity Metrics:" << std::endl;
+        std::cout << "  Primitive count: " << primitives.size() << " spheres" << std::endl;
+        std::cout << "  Material count: " << materials.size() << " materials" << std::endl;
+        std::cout << "  Memory per primitive: " << sizeof(Sphere) << " bytes" << std::endl;
+        std::cout << "  Memory per material: " << sizeof(LambertMaterial) << " bytes" << std::endl;
+        
+        std::cout << "\nLinear Scaling Analysis:" << std::endl;
+        std::cout << "  Current primitive memory: " << primitive_memory << " bytes" << std::endl;
+        std::cout << "  If doubled to " << (primitives.size() * 2) << " spheres: " 
+                  << (primitive_memory * 2) << " bytes" << std::endl;
+        std::cout << "  Memory scaling: O(n) linear with primitive count" << std::endl;
+        
+        // Performance implications
+        std::cout << "\nPerformance-Memory Trade-offs:" << std::endl;
+        std::cout << "  Scene memory: " << (calculate_scene_memory_usage() / 1024.0f) << " KB" << std::endl;
+        std::cout << "  Intersection cost: O(n) per ray (n = primitive count)" << std::endl;
+        
+        if (primitives.size() > 10) {
+            std::cout << "  Educational note: " << primitives.size() << " primitives requires " 
+                      << primitives.size() << " intersection tests per ray" << std::endl;
+            std::cout << "  Real-world optimization: Use spatial acceleration (BVH, octrees)" << std::endl;
+        }
+        
+        std::cout << "=== End Memory-Scene Relationship ===" << std::endl;
+    }
 };

@@ -4,10 +4,93 @@
 #include <cmath>
 #include <algorithm>
 #include <iostream>
+#include <string>
+#include <stdexcept>
+#include <sstream>
+#include <iomanip>
 
 // STB Image Write implementation
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
+
+// Resolution management structure for multi-resolution rendering support
+struct Resolution {
+    int width, height;
+    std::string name;
+    
+    Resolution(int w, int h, const std::string& n = "") 
+        : width(w), height(h), name(n) {}
+    
+    float aspect_ratio() const { return (float)width / height; }
+    size_t pixel_count() const { return width * height; }
+    size_t memory_estimate_bytes() const { return pixel_count() * sizeof(Vector3); }
+    
+    // Common presets for educational ray tracing
+    static const Resolution SMALL;    // 256x256
+    static const Resolution MEDIUM;   // 512x512  
+    static const Resolution LARGE;    // 1024x1024
+    static const Resolution XLARGE;   // 2048x2048
+    
+    static Resolution parse_from_string(const std::string& resolution_str);
+    static std::vector<Resolution> get_common_presets();
+    
+    // Educational memory analysis
+    void print_memory_analysis() const {
+        float mb = memory_estimate_bytes() / (1024.0f * 1024.0f);
+        std::cout << "Resolution " << width << "x" << height << " (" << name << "):" << std::endl;
+        std::cout << "  Pixels: " << pixel_count() << std::endl;
+        std::cout << "  Memory: " << mb << " MB" << std::endl;
+        std::cout << "  Aspect ratio: " << aspect_ratio() << ":1" << std::endl;
+        
+        if (mb > 100.0f) {
+            std::cout << "  WARNING: Large memory usage! Consider smaller resolution for educational use." << std::endl;
+        }
+    }
+};
+
+// Define common resolution presets
+const Resolution Resolution::SMALL(256, 256, "Small");
+const Resolution Resolution::MEDIUM(512, 512, "Medium");
+const Resolution Resolution::LARGE(1024, 1024, "Large");
+const Resolution Resolution::XLARGE(2048, 2048, "X-Large");
+
+// Parse resolution from command line string (e.g., "1024x768")
+Resolution Resolution::parse_from_string(const std::string& resolution_str) {
+    // Find the 'x' separator
+    size_t x_pos = resolution_str.find('x');
+    if (x_pos == std::string::npos) {
+        x_pos = resolution_str.find('X');  // Also accept uppercase X
+    }
+    
+    if (x_pos == std::string::npos) {
+        throw std::invalid_argument("Resolution format must be WIDTHxHEIGHT (e.g., 512x512)");
+    }
+    
+    try {
+        std::string width_str = resolution_str.substr(0, x_pos);
+        std::string height_str = resolution_str.substr(x_pos + 1);
+        
+        int width = std::stoi(width_str);
+        int height = std::stoi(height_str);
+        
+        if (width <= 0 || height <= 0) {
+            throw std::invalid_argument("Resolution dimensions must be positive integers");
+        }
+        
+        if (width > 4096 || height > 4096) {
+            throw std::invalid_argument("Resolution too large (maximum 4096x4096 for educational use)");
+        }
+        
+        return Resolution(width, height, "Custom");
+    } catch (const std::invalid_argument& e) {
+        throw std::invalid_argument("Invalid resolution format: " + std::string(e.what()));
+    }
+}
+
+// Get list of common preset resolutions
+std::vector<Resolution> Resolution::get_common_presets() {
+    return {Resolution::SMALL, Resolution::MEDIUM, Resolution::LARGE, Resolution::XLARGE};
+}
 
 // Image class manages pixel data for ray traced output with educational color management
 // Provides complete color processing pipeline from linear RGB to display-ready output
@@ -31,6 +114,7 @@
 class Image {
 public:
     int width, height;                    // Image dimensions in pixels
+    float aspect_ratio;                   // Computed aspect ratio (width/height)
     std::vector<Vector3> pixels;          // RGB data as Vector3 for mathematical consistency
     
     // Constructor: Creates image with specified dimensions
@@ -40,6 +124,15 @@ public:
             width = height = 1;  // Default to 1x1 for safety
             pixels.resize(1, Vector3(0, 0, 0));
         }
+        aspect_ratio = static_cast<float>(width) / height;
+        print_memory_statistics();
+    }
+    
+    // Constructor from Resolution struct
+    Image(const Resolution& resolution) : Image(resolution.width, resolution.height) {
+        std::cout << "\n=== Image Created from Resolution ===" << std::endl;
+        resolution.print_memory_analysis();
+        explain_memory_layout();
     }
     
     // Pixel access with bounds checking - mutable version
@@ -297,6 +390,123 @@ public:
         return true;
     }
     
+    // Memory and performance monitoring methods
+    size_t memory_usage_bytes() const {
+        return pixels.size() * sizeof(Vector3);
+    }
+    
+    void print_memory_statistics() const {
+        size_t bytes = memory_usage_bytes();
+        float mb = bytes / (1024.0f * 1024.0f);
+        
+        std::cout << "\n=== Image Memory Statistics ===" << std::endl;
+        std::cout << "Resolution: " << width << "x" << height << " pixels" << std::endl;
+        std::cout << "Total pixels: " << pixels.size() << std::endl;
+        std::cout << "Memory usage: " << bytes << " bytes (" << mb << " MB)" << std::endl;
+        std::cout << "Bytes per pixel: " << sizeof(Vector3) << " (Vector3: 3 × float)" << std::endl;
+        
+        if (mb > 100.0f) {
+            std::cout << "WARNING: Large memory allocation detected!" << std::endl;
+            std::cout << "Educational note: Memory scales quadratically with resolution." << std::endl;
+            std::cout << "Doubling width AND height quadruples memory usage." << std::endl;
+        }
+        
+        std::cout << "=== End Memory Statistics ===" << std::endl;
+    }
+    
+    void explain_memory_layout() const {
+        std::cout << "\n=== Educational Memory Layout Explanation ===" << std::endl;
+        std::cout << "Memory Layout: Row-major order" << std::endl;
+        std::cout << "  - Pixels stored left-to-right, then top-to-bottom" << std::endl;
+        std::cout << "  - Index calculation: pixel[y * width + x]" << std::endl;
+        std::cout << "  - Cache-friendly for scanline rendering" << std::endl;
+        
+        std::cout << "Memory Scaling:" << std::endl;
+        std::cout << "  - Linear with pixel count: O(width × height)" << std::endl;
+        std::cout << "  - Quadratic with resolution: doubling dimensions = 4× memory" << std::endl;
+        std::cout << "  - Example scaling from 512x512 to 1024x1024:" << std::endl;
+        std::cout << "    512×512 = 262,144 pixels = 3.0 MB" << std::endl;
+        std::cout << "   1024×1024 = 1,048,576 pixels = 12.0 MB (4× increase)" << std::endl;
+        
+        std::cout << "Memory Efficiency:" << std::endl;
+        std::cout << "  - Vector3 per pixel: 12 bytes (3 × 4-byte float)" << std::endl;
+        std::cout << "  - No padding or alignment overhead" << std::endl;
+        std::cout << "  - Direct mathematical operations on pixel data" << std::endl;
+        std::cout << "=== End Memory Layout Explanation ===" << std::endl;
+    }
+    
+    void print_resolution_statistics() const {
+        std::cout << "\n=== Resolution Statistics ===" << std::endl;
+        std::cout << "Dimensions: " << width << " × " << height << " pixels" << std::endl;
+        std::cout << "Aspect ratio: " << aspect_ratio << ":1" << std::endl;
+        
+        // Classify aspect ratio
+        if (std::abs(aspect_ratio - 1.0f) < 0.01f) {
+            std::cout << "Format: Square (1:1)" << std::endl;
+        } else if (std::abs(aspect_ratio - 4.0f/3.0f) < 0.01f) {
+            std::cout << "Format: Classic TV (4:3)" << std::endl;
+        } else if (std::abs(aspect_ratio - 16.0f/9.0f) < 0.01f) {
+            std::cout << "Format: Widescreen (16:9)" << std::endl;
+        } else {
+            std::cout << "Format: Custom aspect ratio" << std::endl;
+        }
+        
+        std::cout << "Pixel count: " << (width * height) << std::endl;
+        std::cout << "Memory estimate: " << (memory_usage_bytes() / (1024.0f * 1024.0f)) << " MB" << std::endl;
+        
+        // Memory warnings based on resolution
+        check_resolution_memory_warnings();
+        
+        std::cout << "=== End Resolution Statistics ===" << std::endl;
+    }
+    
+    // Resolution-specific memory warnings for educational guidance
+    void check_resolution_memory_warnings() const {
+        size_t bytes = memory_usage_bytes();
+        float mb = bytes / (1024.0f * 1024.0f);
+        int pixel_count = width * height;
+        
+        std::cout << "\nResolution Memory Analysis:" << std::endl;
+        
+        // Educational warnings based on resolution
+        if (pixel_count > 4000000) { // > 2048x2048
+            std::cout << "⚠️  WARNING: Very high resolution detected!" << std::endl;
+            std::cout << "  - Resolution: " << width << "x" << height << " = " << pixel_count << " pixels" << std::endl;
+            std::cout << "  - Memory usage: " << mb << " MB" << std::endl;
+            std::cout << "  - Educational guidance: Consider smaller resolutions for learning" << std::endl;
+            std::cout << "  - High resolution may cause slow rendering and high memory usage" << std::endl;
+        } else if (pixel_count > 1000000) { // > 1024x1024  
+            std::cout << "🔶 NOTICE: High resolution" << std::endl;
+            std::cout << "  - Resolution: " << width << "x" << height << " = " << pixel_count << " pixels" << std::endl;
+            std::cout << "  - Memory usage: " << mb << " MB" << std::endl;
+            std::cout << "  - Educational note: Good for detailed results, but will take longer to render" << std::endl;
+        } else if (pixel_count > 250000) { // > 512x512
+            std::cout << "✅ Moderate resolution - good balance for educational use" << std::endl;
+            std::cout << "  - Resolution: " << width << "x" << height << " = " << pixel_count << " pixels" << std::endl;
+            std::cout << "  - Memory usage: " << mb << " MB" << std::endl;
+        } else {
+            std::cout << "✅ Low resolution - optimal for fast educational experiments" << std::endl;
+            std::cout << "  - Resolution: " << width << "x" << height << " = " << pixel_count << " pixels" << std::endl;
+            std::cout << "  - Memory usage: " << mb << " MB" << std::endl;
+        }
+        
+        // Demonstrate quadratic scaling
+        std::cout << "\nQuadratic Scaling Demonstration:" << std::endl;
+        if (width == height) { // Square resolution
+            int double_res = width * 2;
+            size_t double_pixels = double_res * double_res;
+            float double_mb = (double_pixels * sizeof(Vector3)) / (1024.0f * 1024.0f);
+            
+            std::cout << "  Current (" << width << "x" << height << "): " 
+                      << pixel_count << " pixels, " << mb << " MB" << std::endl;
+            std::cout << "  Doubled (" << double_res << "x" << double_res << "): " 
+                      << double_pixels << " pixels, " << double_mb << " MB" << std::endl;
+            std::cout << "  Scaling factor: " << (double_pixels / (float)pixel_count) << "× pixels, " 
+                      << (double_mb / mb) << "× memory" << std::endl;
+            std::cout << "  Educational insight: Doubling dimensions quadruples memory usage!" << std::endl;
+        }
+    }
+
     // Educational method: explain color management principles
     void explain_color_management() const {
         std::cout << "\n=== Color Management in Ray Tracing ===" << std::endl;

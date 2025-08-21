@@ -10,6 +10,7 @@
 #include "src/core/scene_loader.hpp"
 #include "src/core/point_light.hpp"
 #include "src/core/camera.hpp"
+#include "src/core/image.hpp"
 #include "src/materials/lambert.hpp"
 
 namespace MathematicalTests {
@@ -1619,6 +1620,239 @@ sphere 0 0 0 -1.0 nonexistent_material  # Negative radius, invalid material
     }
 }
 
+    // ===========================
+    // STORY 2.4 ASPECT RATIO AND FOV CORRECTNESS TESTS (AC 5)
+    // ===========================
+    
+    static bool test_aspect_ratio_calculation() {
+        std::cout << "\n=== Test: Aspect Ratio Calculation Correctness ===" << std::endl;
+        
+        // Test Case 1: Square resolution (1:1)
+        std::cout << "Test 1: Square aspect ratio..." << std::endl;
+        Camera square_camera(Point3(0, 0, 0), Point3(0, 0, -1), Vector3(0, 1, 0), 45.0f);
+        square_camera.set_aspect_ratio_from_resolution(512, 512);
+        
+        float expected_square = 1.0f;
+        assert(std::abs(square_camera.aspect_ratio - expected_square) < 1e-6f);
+        
+        // Test Case 2: Classic 4:3 aspect ratio
+        std::cout << "Test 2: Classic 4:3 aspect ratio..." << std::endl;
+        Camera classic_camera(Point3(0, 0, 0), Point3(0, 0, -1), Vector3(0, 1, 0), 45.0f);
+        classic_camera.set_aspect_ratio_from_resolution(640, 480);
+        
+        float expected_43 = 640.0f / 480.0f;
+        assert(std::abs(classic_camera.aspect_ratio - expected_43) < 1e-6f);
+        
+        // Test Case 3: Widescreen 16:9 aspect ratio
+        std::cout << "Test 3: Widescreen 16:9 aspect ratio..." << std::endl;
+        Camera wide_camera(Point3(0, 0, 0), Point3(0, 0, -1), Vector3(0, 1, 0), 45.0f);
+        wide_camera.set_aspect_ratio_from_resolution(1920, 1080);
+        
+        float expected_169 = 1920.0f / 1080.0f;
+        assert(std::abs(wide_camera.aspect_ratio - expected_169) < 1e-6f);
+        
+        // Test Case 4: Portrait aspect ratio
+        std::cout << "Test 4: Portrait aspect ratio..." << std::endl;
+        Camera portrait_camera(Point3(0, 0, 0), Point3(0, 0, -1), Vector3(0, 1, 0), 45.0f);
+        portrait_camera.set_aspect_ratio_from_resolution(480, 640);
+        
+        float expected_portrait = 480.0f / 640.0f;
+        assert(std::abs(portrait_camera.aspect_ratio - expected_portrait) < 1e-6f);
+        
+        std::cout << "✓ Aspect ratio calculation: PASSED" << std::endl;
+        return true;
+    }
+    
+    static bool test_fov_scaling_correctness() {
+        std::cout << "\n=== Test: FOV Scaling Correctness ===" << std::endl;
+        
+        // Test Case 1: Vertical FOV should remain constant across aspect ratios
+        std::cout << "Test 1: Vertical FOV consistency..." << std::endl;
+        float vertical_fov = 60.0f;
+        
+        Camera square_camera(Point3(0, 0, 0), Point3(0, 0, -1), Vector3(0, 1, 0), vertical_fov);
+        square_camera.set_aspect_ratio(1.0f);
+        
+        Camera wide_camera(Point3(0, 0, 0), Point3(0, 0, -1), Vector3(0, 1, 0), vertical_fov);
+        wide_camera.set_aspect_ratio(16.0f / 9.0f);
+        
+        assert(std::abs(square_camera.field_of_view_degrees - vertical_fov) < 1e-6f);
+        assert(std::abs(wide_camera.field_of_view_degrees - vertical_fov) < 1e-6f);
+        
+        // Test Case 2: Horizontal FOV should scale with aspect ratio
+        std::cout << "Test 2: Horizontal FOV scaling..." << std::endl;
+        float horizontal_fov_square = square_camera.calculate_horizontal_fov();
+        float horizontal_fov_wide = wide_camera.calculate_horizontal_fov();
+        
+        // For square aspect (1:1), horizontal FOV should equal vertical FOV
+        assert(std::abs(horizontal_fov_square - vertical_fov) < 1e-3f);
+        
+        // For 16:9 aspect, horizontal FOV should be larger than vertical FOV
+        assert(horizontal_fov_wide > vertical_fov);
+        
+        // Test mathematical relationship: hfov = 2 * atan(tan(vfov/2) * aspect)
+        float vfov_rad = vertical_fov * M_PI / 180.0f;
+        float expected_hfov_rad = 2.0f * std::atan(std::tan(vfov_rad * 0.5f) * (16.0f / 9.0f));
+        float expected_hfov_deg = expected_hfov_rad * 180.0f / M_PI;
+        
+        assert(std::abs(horizontal_fov_wide - expected_hfov_deg) < 1e-3f);
+        
+        std::cout << "✓ FOV scaling correctness: PASSED" << std::endl;
+        return true;
+    }
+    
+    static bool test_ray_generation_non_square_resolutions() {
+        std::cout << "\n=== Test: Ray Generation for Non-Square Resolutions ===" << std::endl;
+        
+        // Test Case 1: Ray direction normalization for different aspect ratios
+        std::cout << "Test 1: Ray direction normalization..." << std::endl;
+        
+        struct TestResolution {
+            int width, height;
+            std::string name;
+        };
+        
+        TestResolution test_resolutions[] = {
+            {512, 512, "Square"},
+            {640, 480, "4:3"},
+            {1920, 1080, "16:9"},
+            {1080, 1920, "9:16 Portrait"},
+            {2560, 1080, "21:9 Ultrawide"}
+        };
+        
+        for (const auto& res : test_resolutions) {
+            std::cout << "  Testing " << res.name << " (" << res.width << "x" << res.height << ")..." << std::endl;
+            
+            Camera test_camera(Point3(0, 0, 0), Point3(0, 0, -1), Vector3(0, 1, 0), 45.0f);
+            test_camera.set_aspect_ratio_from_resolution(res.width, res.height);
+            
+            // Test corners and center
+            Ray center = test_camera.generate_ray(res.width / 2.0f, res.height / 2.0f, res.width, res.height);
+            Ray top_left = test_camera.generate_ray(0, 0, res.width, res.height);
+            Ray top_right = test_camera.generate_ray(res.width - 1, 0, res.width, res.height);
+            Ray bottom_left = test_camera.generate_ray(0, res.height - 1, res.width, res.height);
+            Ray bottom_right = test_camera.generate_ray(res.width - 1, res.height - 1, res.width, res.height);
+            
+            // All rays should be normalized
+            assert(std::abs(center.direction.length() - 1.0f) < 1e-6f);
+            assert(std::abs(top_left.direction.length() - 1.0f) < 1e-6f);
+            assert(std::abs(top_right.direction.length() - 1.0f) < 1e-6f);
+            assert(std::abs(bottom_left.direction.length() - 1.0f) < 1e-6f);
+            assert(std::abs(bottom_right.direction.length() - 1.0f) < 1e-6f);
+            
+            // Ray generation validation should pass
+            bool validation_result = test_camera.validate_ray_generation(res.width, res.height);
+            assert(validation_result);
+        }
+        
+        std::cout << "✓ Ray generation for non-square resolutions: PASSED" << std::endl;
+        return true;
+    }
+    
+    static bool test_common_aspect_ratios() {
+        std::cout << "\n=== Test: Common Aspect Ratios Validation ===" << std::endl;
+        
+        // Test Case 1: Standard aspect ratios with known properties
+        std::cout << "Test 1: Standard aspect ratio properties..." << std::endl;
+        
+        struct AspectRatioTest {
+            float ratio;
+            std::string name;
+            float tolerance;
+        };
+        
+        AspectRatioTest standard_ratios[] = {
+            {1.0f, "Square (1:1)", 1e-6f},
+            {4.0f/3.0f, "Classic TV (4:3)", 1e-6f},
+            {16.0f/9.0f, "Widescreen (16:9)", 1e-6f},
+            {21.0f/9.0f, "Ultrawide (21:9)", 1e-6f},
+            {3.0f/4.0f, "Portrait (3:4)", 1e-6f}
+        };
+        
+        for (const auto& test : standard_ratios) {
+            std::cout << "  Testing " << test.name << " (ratio: " << test.ratio << ")..." << std::endl;
+            
+            Camera aspect_camera(Point3(0, 0, 0), Point3(0, 0, -1), Vector3(0, 1, 0), 45.0f);
+            aspect_camera.set_aspect_ratio(test.ratio);
+            
+            assert(std::abs(aspect_camera.aspect_ratio - test.ratio) < test.tolerance);
+            
+            // Test horizontal FOV calculation
+            float horizontal_fov = aspect_camera.calculate_horizontal_fov();
+            float vertical_fov = aspect_camera.field_of_view_degrees;
+            
+            // Mathematical validation: hfov = 2 * atan(tan(vfov/2) * aspect)
+            float vfov_rad = vertical_fov * M_PI / 180.0f;
+            float expected_hfov_rad = 2.0f * std::atan(std::tan(vfov_rad * 0.5f) * test.ratio);
+            float expected_hfov_deg = expected_hfov_rad * 180.0f / M_PI;
+            
+            assert(std::abs(horizontal_fov - expected_hfov_deg) < 1e-3f);
+            
+            // For square ratios, horizontal and vertical FOV should be equal
+            if (std::abs(test.ratio - 1.0f) < 1e-6f) {
+                assert(std::abs(horizontal_fov - vertical_fov) < 1e-3f);
+            }
+            
+            // For landscape ratios (>1), horizontal FOV should be larger
+            if (test.ratio > 1.0f) {
+                assert(horizontal_fov > vertical_fov);
+            }
+            
+            // For portrait ratios (<1), horizontal FOV should be smaller
+            if (test.ratio < 1.0f) {
+                assert(horizontal_fov < vertical_fov);
+            }
+        }
+        
+        std::cout << "✓ Common aspect ratios validation: PASSED" << std::endl;
+        return true;
+    }
+    
+    static bool test_resolution_aspect_ratio_integration() {
+        std::cout << "\n=== Test: Resolution-Aspect Ratio Integration ===" << std::endl;
+        
+        // Test Case 1: Resolution class integration with camera
+        std::cout << "Test 1: Resolution struct integration..." << std::endl;
+        
+        Resolution test_res = Resolution::parse_from_string("1920x1080");
+        Camera integration_camera(Point3(0, 0, 0), Point3(0, 0, -1), Vector3(0, 1, 0), 45.0f);
+        integration_camera.set_aspect_ratio_from_resolution(test_res.width, test_res.height);
+        
+        float expected_aspect = static_cast<float>(test_res.width) / test_res.height;
+        assert(std::abs(integration_camera.aspect_ratio - expected_aspect) < 1e-6f);
+        
+        // Test Case 2: Aspect ratio mismatch detection
+        std::cout << "Test 2: Aspect ratio mismatch detection..." << std::endl;
+        
+        Camera mismatch_camera(Point3(0, 0, 0), Point3(0, 0, -1), Vector3(0, 1, 0), 45.0f);
+        mismatch_camera.set_aspect_ratio(1.0f);  // Set to square
+        
+        // Validation should fail for non-square resolution
+        bool should_fail = mismatch_camera.validate_ray_generation(1920, 1080);
+        assert(!should_fail);  // Should fail due to aspect ratio mismatch
+        
+        // Fix the aspect ratio and try again
+        mismatch_camera.set_aspect_ratio_from_resolution(1920, 1080);
+        bool should_pass = mismatch_camera.validate_ray_generation(1920, 1080);
+        assert(should_pass);  // Should pass after fixing aspect ratio
+        
+        // Test Case 3: Edge case aspect ratios
+        std::cout << "Test 3: Edge case aspect ratios..." << std::endl;
+        
+        Camera edge_camera(Point3(0, 0, 0), Point3(0, 0, -1), Vector3(0, 1, 0), 45.0f);
+        
+        // Very wide aspect ratio
+        edge_camera.set_aspect_ratio_from_resolution(3840, 1080);  // ~3.56:1
+        assert(edge_camera.validate_ray_generation(3840, 1080));
+        
+        // Very tall aspect ratio
+        edge_camera.set_aspect_ratio_from_resolution(1080, 3840);  // ~0.28:1
+        assert(edge_camera.validate_ray_generation(1080, 3840));
+        
+        std::cout << "✓ Resolution-aspect ratio integration: PASSED" << std::endl;
+        return true;
+    }
+
 int main() {
     std::cout << "=== Educational Ray Tracer - Mathematical Correctness Tests ===" << std::endl;
     
@@ -1674,6 +1908,14 @@ int main() {
         all_passed &= MathematicalTests::test_scene_file_loading();
         all_passed &= MathematicalTests::test_intersection_performance_monitoring();
         all_passed &= MathematicalTests::test_scene_validation_and_edge_cases();
+        
+        // === STORY 2.4 ASPECT RATIO AND FOV CORRECTNESS VALIDATION TESTS ===
+        std::cout << "\n=== Story 2.4 Aspect Ratio and FOV Correctness Validation Tests ===" << std::endl;
+        all_passed &= test_aspect_ratio_calculation();
+        all_passed &= test_fov_scaling_correctness();
+        all_passed &= test_ray_generation_non_square_resolutions();
+        all_passed &= test_common_aspect_ratios();
+        all_passed &= test_resolution_aspect_ratio_integration();
         
         if (all_passed) {
             std::cout << "\n✅ ALL MATHEMATICAL TESTS PASSED" << std::endl;
