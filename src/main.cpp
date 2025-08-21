@@ -10,6 +10,8 @@
 #include "materials/lambert.hpp"
 #include "core/camera.hpp"
 #include "core/image.hpp"
+#include "core/performance_timer.hpp"
+#include "core/progress_reporter.hpp"
 #include <chrono>
 
 // Cross-platform preprocessor directives
@@ -29,10 +31,21 @@ int main(int argc, char* argv[]) {
     for (int i = 1; i < argc; i++) {
         if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
             Camera::print_command_line_help();
-            std::cout << "\n=== Multi-Primitive Scene Management Help ===" << std::endl;
-            std::cout << "Additional parameters for Story 2.3:" << std::endl;
-            std::cout << "--scene <filename>    Load scene from file (default: assets/simple_scene.scene)" << std::endl;
+            std::cout << "\n=== Multi-Resolution and Performance Help ===" << std::endl;
+            std::cout << "Resolution parameters (Story 2.4):" << std::endl;
+            std::cout << "--resolution <WxH>    Set image resolution (e.g., --resolution 1024x768)" << std::endl;
+            std::cout << "                      Common presets: 256x256, 512x512, 1024x1024, 2048x2048" << std::endl;
+            std::cout << "                      Default: 1024x768 (Epic 2 Showcase)" << std::endl;
+            std::cout << "\nScene parameters:" << std::endl;
+            std::cout << "--scene <filename>    Load scene from file (default: assets/showcase_scene.scene)" << std::endl;
             std::cout << "--no-scene            Use hardcoded single sphere for compatibility" << std::endl;
+            std::cout << "\nQuick presets:" << std::endl;
+            std::cout << "--preset showcase     Epic 2 showcase (1024x768, complex scene, optimal camera)" << std::endl;
+            std::cout << "--showcase            Shorthand for --preset showcase" << std::endl;
+            std::cout << "--preset performance  Fast render (512x512, simple scene, basic camera)" << std::endl;
+            std::cout << "--performance         Shorthand for --preset performance" << std::endl;
+            std::cout << "--preset quality      High quality (1024x1024, showcase scene, wide FOV)" << std::endl;
+            std::cout << "--quality             Shorthand for --preset quality" << std::endl;
             std::cout << "\nScene file format:" << std::endl;
             std::cout << "material <name> <r> <g> <b>  - Define material with RGB albedo" << std::endl;
             std::cout << "sphere <x> <y> <z> <radius> <material>  - Add sphere to scene" << std::endl;
@@ -40,17 +53,119 @@ int main(int argc, char* argv[]) {
         }
     }
     
-    // Check for scene file parameter
-    std::string scene_filename = "assets/simple_scene.scene";  // Default scene
+    // Check for scene file and resolution parameters
+    // Epic 2 Showcase Defaults - optimized to demonstrate all capabilities
+    std::string scene_filename = "../assets/showcase_scene.scene";  // Enhanced showcase scene
     bool use_scene_file = true;
+    Resolution image_resolution = Resolution::parse_from_string("1024x768");  // High-quality 4:3 aspect ratio
     
-    for (int i = 1; i < argc - 1; i++) {
-        if (std::strcmp(argv[i], "--scene") == 0) {
+    for (int i = 1; i < argc; i++) {
+        if (std::strcmp(argv[i], "--scene") == 0 && i + 1 < argc) {
             scene_filename = argv[i + 1];
             std::cout << "Scene file override: " << scene_filename << std::endl;
+            i++;  // Skip next argument since we consumed it
         } else if (std::strcmp(argv[i], "--no-scene") == 0) {
             use_scene_file = false;
             std::cout << "Scene loading disabled - using hardcoded sphere" << std::endl;
+        } else if (std::strcmp(argv[i], "--resolution") == 0 && i + 1 < argc) {
+            try {
+                image_resolution = Resolution::parse_from_string(argv[i + 1]);
+                std::cout << "Resolution override: " << image_resolution.width << "x" << image_resolution.height << std::endl;
+                image_resolution.print_memory_analysis();
+            } catch (const std::exception& e) {
+                std::cout << "ERROR: Invalid resolution format '" << argv[i + 1] << "'" << std::endl;
+                std::cout << "Error details: " << e.what() << std::endl;
+                std::cout << "Supported formats: WIDTHxHEIGHT (e.g., 512x512)" << std::endl;
+                std::cout << "Common presets: 256x256, 512x512, 1024x1024, 2048x2048" << std::endl;
+                return 1;
+            }
+            i++;  // Skip next argument since we consumed it
+        } else if (std::strcmp(argv[i], "--preset") == 0 && i + 1 < argc) {
+            std::string preset = argv[i + 1];
+            std::cout << "Using preset: " << preset << std::endl;
+            
+            if (preset == "showcase") {
+                // Epic 2 Showcase - ensure scene file path works from build/ directory
+                scene_filename = "../assets/showcase_scene.scene";
+                image_resolution = Resolution::parse_from_string("1024x768");
+                std::cout << "Epic 2 Showcase preset: 1024x768, complex scene, optimal camera" << std::endl;
+            } else if (preset == "performance") {
+                image_resolution = Resolution::MEDIUM;  // 512x512
+                scene_filename = "../assets/simple_scene.scene";
+                std::cout << "Performance preset: 512x512, simple scene, fast render" << std::endl;
+            } else if (preset == "quality") {
+                image_resolution = Resolution::LARGE;  // 1024x1024
+                scene_filename = "../assets/showcase_scene.scene";
+                std::cout << "Quality preset: 1024x1024, showcase scene, maximum quality" << std::endl;
+            } else {
+                std::cout << "ERROR: Unknown preset '" << preset << "'" << std::endl;
+                std::cout << "Available presets: showcase, performance, quality" << std::endl;
+                return 1;
+            }
+            i++;  // Skip next argument since we consumed it
+        } else if (std::strcmp(argv[i], "--showcase") == 0) {
+            scene_filename = "../assets/showcase_scene.scene";
+            image_resolution = Resolution::parse_from_string("1024x768");
+            std::cout << "Using preset: showcase" << std::endl;
+            std::cout << "Epic 2 Showcase preset: 1024x768, complex scene, optimal camera" << std::endl;
+        } else if (std::strcmp(argv[i], "--performance") == 0) {
+            image_resolution = Resolution::MEDIUM;  // 512x512
+            scene_filename = "../assets/simple_scene.scene";
+            std::cout << "Using preset: performance" << std::endl;
+            std::cout << "Performance preset: 512x512, simple scene, fast render" << std::endl;
+        } else if (std::strcmp(argv[i], "--quality") == 0) {
+            image_resolution = Resolution::LARGE;  // 1024x1024
+            scene_filename = "../assets/showcase_scene.scene";
+            std::cout << "Using preset: quality" << std::endl;
+            std::cout << "Quality preset: 1024x1024, showcase scene, maximum quality" << std::endl;
+        } else if (strncmp(argv[i], "--", 2) == 0) {
+            // Check if it's a known camera argument (handled later by camera.set_from_command_line_args)
+            if (std::strcmp(argv[i], "--camera-pos") == 0 || 
+                std::strcmp(argv[i], "--camera-target") == 0 || 
+                std::strcmp(argv[i], "--fov") == 0) {
+                // Valid camera argument, skip it and its parameter
+                if (i + 1 < argc) i++; // Skip parameter if it exists
+            } else {
+                // Unknown argument starting with --
+                std::cout << "ERROR: Unknown argument '" << argv[i] << "'" << std::endl;
+                std::cout << "Did you mean:" << std::endl;
+                
+                // Provide helpful suggestions based on common mistakes
+                if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
+                    // This shouldn't happen since help is handled earlier, but just in case
+                } else if (std::strcmp(argv[i], "--showcase") == 0 || std::strcmp(argv[i], "--performance") == 0 || std::strcmp(argv[i], "--quality") == 0) {
+                    // This shouldn't happen since these are handled above, but just in case
+                } else {
+                    // Common typos and suggestions
+                    std::string arg = argv[i];
+                    if (arg.find("quality") != std::string::npos) {
+                        std::cout << "  --preset quality     (High quality preset)" << std::endl;
+                        std::cout << "  --quality            (Shorthand for --preset quality)" << std::endl;
+                    } else if (arg.find("performance") != std::string::npos) {
+                        std::cout << "  --preset performance (Fast render preset)" << std::endl;
+                        std::cout << "  --performance        (Shorthand for --preset performance)" << std::endl;
+                    } else if (arg.find("showcase") != std::string::npos) {
+                        std::cout << "  --preset showcase    (Epic 2 showcase preset)" << std::endl;
+                        std::cout << "  --showcase           (Shorthand for --preset showcase)" << std::endl;
+                    } else if (arg.find("resolution") != std::string::npos || arg.find("res") != std::string::npos) {
+                        std::cout << "  --resolution WxH     (e.g., --resolution 1024x768)" << std::endl;
+                    } else if (arg.find("scene") != std::string::npos) {
+                        std::cout << "  --scene <filename>   (Load custom scene file)" << std::endl;
+                        std::cout << "  --no-scene           (Use hardcoded sphere)" << std::endl;
+                    } else if (arg.find("camera") != std::string::npos || arg.find("pos") != std::string::npos) {
+                        std::cout << "  --camera-pos x,y,z   (Set camera position)" << std::endl;
+                        std::cout << "  --camera-target x,y,z(Set camera target)" << std::endl;
+                    } else if (arg.find("fov") != std::string::npos) {
+                        std::cout << "  --fov degrees        (Set field of view)" << std::endl;
+                    } else {
+                        std::cout << "  --help               (Show all available options)" << std::endl;
+                        std::cout << "  --preset showcase    (Epic 2 showcase)" << std::endl;
+                        std::cout << "  --resolution WxH     (Set custom resolution)" << std::endl;
+                    }
+                }
+                std::cout << "\nUse --help to see all available options." << std::endl;
+                return 1;
+            }
         }
     }
     
@@ -432,39 +547,69 @@ int main(int argc, char* argv[]) {
     
     std::cout << "\n=== Story 2.1: Multi-Ray Image Generation ===" << std::endl;
     
-    // Performance monitoring setup
+    // Performance monitoring setup - Educational comprehensive timing
+    PerformanceTimer performance_timer;
     auto total_start_time = std::chrono::high_resolution_clock::now();
+    performance_timer.start_phase(PerformanceTimer::TOTAL_RENDER);
     
-    // Image resolution configuration
-    int image_width = 256;   // Educational resolution for demonstration
-    int image_height = 256;  // Square aspect ratio for simplicity
+    // Image resolution configuration (from command line or default)
+    int image_width = image_resolution.width;
+    int image_height = image_resolution.height;
     
     std::cout << "\n--- Multi-Ray Rendering Configuration ---" << std::endl;
     std::cout << "Image resolution: " << image_width << " × " << image_height << " pixels" << std::endl;
+    std::cout << "Resolution preset: " << image_resolution.name << std::endl;
     std::cout << "Total rays to generate: " << (image_width * image_height) << std::endl;
     std::cout << "Rendering approach: One ray per pixel (uniform sampling)" << std::endl;
     
-    // Camera setup for image generation
-    Point3 camera_position(0, 0, 0);
-    Point3 camera_target(0, 0, -3);  // Looking toward sphere center
-    Vector3 camera_up(0, 1, 0);      // Y is up
-    float camera_fov = 45.0f;        // 45-degree field of view
+    // Display memory and performance predictions
+    image_resolution.print_memory_analysis();
+    
+    // Camera setup for image generation with aspect ratio management (Story 2.4 AC: 5)
+    // Epic 2 Showcase Camera - positioned for optimal scene composition  
+    Point3 camera_position(0.0, 0.0, 1.0);  // INSIDE the scene for guaranteed hits
+    Point3 camera_target(0.0, 0.0, -6.0);    // Looking deeper into scene
+    Vector3 camera_up(0, 1, 0);               // Y is up
+    float camera_fov = 60.0f;                 // Standard FOV from inside scene
     float aspect_ratio = static_cast<float>(image_width) / image_height;
     
+    std::cout << "\n--- Camera Aspect Ratio Configuration (AC 5) ---" << std::endl;
+    std::cout << "Image resolution: " << image_width << " × " << image_height << " pixels" << std::endl;
+    std::cout << "Calculated aspect ratio: " << aspect_ratio << ":1" << std::endl;
+    
     Camera render_camera(camera_position, camera_target, camera_up, camera_fov, aspect_ratio);
+    
+    // Critical AC 5 step: Update camera aspect ratio from image resolution
+    // This ensures FOV correctness across different resolutions
+    render_camera.set_aspect_ratio_from_resolution(image_width, image_height);
     
     // Apply command-line arguments to override default camera parameters
     render_camera.set_from_command_line_args(argc, argv);
     
-    // Validate camera configuration
+    // Validate camera configuration and ray generation (Story 2.4 AC: 5)
     if (!render_camera.validate_camera()) {
         std::cout << "ERROR: Invalid camera configuration!" << std::endl;
         return 1;
     }
     
+    // AC 5 requirement: Validate ray generation for non-square resolutions
+    std::cout << "\n--- Camera Ray Generation Validation (AC 5) ---" << std::endl;
+    if (!render_camera.validate_ray_generation(image_width, image_height)) {
+        std::cout << "ERROR: Camera ray generation validation failed for resolution " 
+                  << image_width << "×" << image_height << "!" << std::endl;
+        std::cout << "This indicates an aspect ratio mismatch that would cause image distortion." << std::endl;
+        return 1;
+    }
+    std::cout << "✓ Camera ray generation validation: PASSED" << std::endl;
+    
     std::cout << "\n--- Camera Configuration ---" << std::endl;
     render_camera.print_camera_parameters();
     render_camera.explain_coordinate_transformation();
+    
+    // Educational output explaining aspect ratio mathematics (AC 5)
+    std::cout << "\n--- Aspect Ratio Mathematics Education (AC 5) ---" << std::endl;
+    render_camera.explain_fov_calculation();
+    render_camera.print_camera_mathematics();
     
     // Scene setup: load from file or create default scene
     Scene render_scene;
@@ -495,8 +640,12 @@ int main(int argc, char* argv[]) {
         render_scene.print_scene_statistics();
     }
     
-    // Image buffer creation
-    Image output_image(image_width, image_height);
+    // Image buffer creation using Resolution with performance monitoring
+    performance_timer.start_phase(PerformanceTimer::IMAGE_OUTPUT);
+    Image output_image(image_resolution);
+    performance_timer.record_memory_usage(output_image.memory_usage_bytes());
+    performance_timer.end_phase(PerformanceTimer::IMAGE_OUTPUT);
+    
     std::cout << "\n--- Image Buffer Configuration ---" << std::endl;
     std::cout << "Created " << image_width << "×" << image_height << " image buffer" << std::endl;
     std::cout << "Pixel storage: Vector3 (linear RGB)" << std::endl;
@@ -505,44 +654,50 @@ int main(int argc, char* argv[]) {
     // Educational color management explanation
     output_image.explain_color_management();
     
-    // Performance counters
+    // Performance counters for legacy compatibility
     int rays_generated = 0;
     int intersection_tests = 0;
     int shading_calculations = 0;
     int background_pixels = 0;
     
+    // Start comprehensive timing for ray generation phase
     auto ray_generation_start = std::chrono::high_resolution_clock::now();
     
     std::cout << "\n--- Multi-Ray Rendering Process ---" << std::endl;
-    std::cout << "Beginning pixel-by-pixel ray generation..." << std::endl;
+    std::cout << "Beginning pixel-by-pixel ray generation with performance monitoring..." << std::endl;
     
-    // Multi-ray pixel sampling: one ray per pixel
+    // Initialize comprehensive progress reporting (Story 2.4 AC: 4)
+    int total_pixels = image_width * image_height;
+    ProgressReporter progress_reporter(total_pixels, &performance_timer);
+    
+    // Multi-ray pixel sampling: one ray per pixel with comprehensive progress tracking
     for (int y = 0; y < image_height; y++) {
-        // Progress reporting every 32 rows for educational visibility
-        if (y % 32 == 0 && y > 0) {
-            float progress = static_cast<float>(y) / image_height * 100.0f;
-            std::cout << "Rendering progress: " << progress << "% (" << y << "/" << image_height << " rows)" << std::endl;
-        }
         
         for (int x = 0; x < image_width; x++) {
-            // Generate camera ray for this pixel
+            // Phase 1: Ray Generation with precise timing
+            performance_timer.start_phase(PerformanceTimer::RAY_GENERATION);
             Ray pixel_ray = render_camera.generate_ray(
                 static_cast<float>(x), 
                 static_cast<float>(y), 
                 image_width, 
                 image_height
             );
+            performance_timer.end_phase(PerformanceTimer::RAY_GENERATION);
+            performance_timer.increment_counter(PerformanceTimer::RAY_GENERATION);
             rays_generated++;
             
-            
-            // Test ray-scene intersection (multiple primitives)
+            // Phase 2: Intersection Testing with performance tracking
+            performance_timer.start_phase(PerformanceTimer::INTERSECTION_TESTING);
             Scene::Intersection intersection = render_scene.intersect(pixel_ray);
+            performance_timer.end_phase(PerformanceTimer::INTERSECTION_TESTING);
+            performance_timer.increment_counter(PerformanceTimer::INTERSECTION_TESTING);
             intersection_tests++;
             
             Vector3 pixel_color(0, 0, 0);  // Default background color (black)
             
             if (intersection.hit) {
-                // Scene intersection found - calculate lighting
+                // Phase 3: Shading Calculation with detailed timing
+                performance_timer.start_phase(PerformanceTimer::SHADING_CALCULATION);
                 shading_calculations++;
                 
                 // Light evaluation
@@ -559,21 +714,37 @@ int main(int argc, char* argv[]) {
                     intersection.normal, 
                     incident_irradiance
                 );
+                performance_timer.end_phase(PerformanceTimer::SHADING_CALCULATION);
+                performance_timer.increment_counter(PerformanceTimer::SHADING_CALCULATION);
             } else {
                 // No intersection - background color
                 background_pixels++;
                 pixel_color = Vector3(0.1f, 0.1f, 0.15f);  // Dark blue background
             }
             
-            // Store pixel in image buffer
+            // Store pixel in image buffer (no additional timing - included in IMAGE_OUTPUT)
             output_image.set_pixel(x, y, pixel_color);
         }
+        
+        // Update progress reporting after each row for better granularity
+        int completed_pixels = (y + 1) * image_width;
+        size_t current_memory = output_image.memory_usage_bytes() + render_scene.calculate_scene_memory_usage();
+        progress_reporter.update_progress(completed_pixels, current_memory);
+        
+        // Check for interrupt capability (placeholder for user cancellation)
+        if (progress_reporter.should_interrupt()) {
+            std::cout << "\nRendering interrupted by user request." << std::endl;
+            break;
+        }
     }
+    
+    // End comprehensive timing
+    performance_timer.end_phase(PerformanceTimer::TOTAL_RENDER);
     
     auto ray_generation_end = std::chrono::high_resolution_clock::now();
     auto total_end_time = std::chrono::high_resolution_clock::now();
     
-    // Performance analysis
+    // Legacy performance analysis for compatibility
     auto ray_generation_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         ray_generation_end - ray_generation_start);
     auto total_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -603,6 +774,37 @@ int main(int argc, char* argv[]) {
     std::cout << "  Total rendering time: " << total_duration.count() << " ms" << std::endl;
     std::cout << "  Rays per second: " << (rays_generated * 1000.0f / total_duration.count()) << std::endl;
     
+    // Comprehensive Educational Performance Analysis (Story 2.4)
+    std::cout << "\n=== Story 2.4: Comprehensive Performance Analysis ===" << std::endl;
+    
+    // Validate timing accuracy for educational requirements
+    bool timing_valid = performance_timer.validate_timing_accuracy();
+    if (timing_valid) {
+        std::cout << "✓ Performance timing validation: PASSED (≥1000 rays, ≥1ms measurement)" << std::endl;
+    } else {
+        std::cout << "⚠ Performance timing validation: LIMITED (results may vary due to small dataset)" << std::endl;
+    }
+    
+    // Display all comprehensive performance breakdowns
+    performance_timer.print_performance_breakdown();
+    performance_timer.print_rays_per_second_statistics();
+    performance_timer.print_phase_analysis();
+    performance_timer.print_memory_performance_correlation();
+    
+    // Comprehensive Memory Usage Analysis (Story 2.4 AC: 3)
+    std::cout << "\n=== Story 2.4: Comprehensive Memory Analysis ===" << std::endl;
+    
+    // Scene memory analysis
+    render_scene.print_memory_usage_analysis();
+    render_scene.explain_memory_scene_relationship();
+    
+    // Combined memory warnings (image + scene)
+    render_scene.check_memory_usage_warnings(output_image.memory_usage_bytes());
+    
+    // Final progress reporting statistics (Story 2.4 AC: 4)
+    std::cout << "\n=== Story 2.4: Progress Reporting Final Analysis ===" << std::endl;
+    progress_reporter.print_final_statistics();
+    
     // Image analysis
     std::cout << "\n=== Educational Image Analysis ===" << std::endl;
     output_image.print_image_statistics();
@@ -629,10 +831,13 @@ int main(int argc, char* argv[]) {
     std::cout << "Successfully generated " << image_width << "×" << image_height << " image" << std::endl;
     std::cout << "All pixels processed with complete light transport calculations" << std::endl;
     
-    // PNG Output Implementation (AC 4)
+    // PNG Output Implementation (AC 4) with performance monitoring
     std::cout << "\n=== PNG Output Generation (AC 4) ===" << std::endl;
+    performance_timer.start_phase(PerformanceTimer::IMAGE_OUTPUT);
     std::string png_filename = "raytracer_output.png";
     bool png_success = output_image.save_to_png(png_filename, true);  // With gamma correction
+    performance_timer.end_phase(PerformanceTimer::IMAGE_OUTPUT);
+    performance_timer.increment_counter(PerformanceTimer::IMAGE_OUTPUT);
     
     if (png_success) {
         std::cout << "✓ Acceptance Criteria 4: PNG image output COMPLETE" << std::endl;
