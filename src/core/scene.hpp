@@ -55,11 +55,13 @@ public:
     // Algorithm: iterate through all primitives, track closest intersection with t-value comparison
     // Educational features: performance statistics, detailed console output for learning
     // Returns: complete intersection information including material and primitive references
-    Intersection intersect(const Ray& ray) const {
-        std::cout << "\n=== Ray-Scene Intersection Testing ===" << std::endl;
-        std::cout << "Ray origin: (" << ray.origin.x << ", " << ray.origin.y << ", " << ray.origin.z << ")" << std::endl;
-        std::cout << "Ray direction: (" << ray.direction.x << ", " << ray.direction.y << ", " << ray.direction.z << ")" << std::endl;
-        std::cout << "Scene primitives: " << primitives.size() << " spheres" << std::endl;
+    Intersection intersect(const Ray& ray, bool verbose = true) const {
+        if (verbose) {
+            std::cout << "\n=== Ray-Scene Intersection Testing ===" << std::endl;
+            std::cout << "Ray origin: (" << ray.origin.x << ", " << ray.origin.y << ", " << ray.origin.z << ")" << std::endl;
+            std::cout << "Ray direction: (" << ray.direction.x << ", " << ray.direction.y << ", " << ray.direction.z << ")" << std::endl;
+            std::cout << "Scene primitives: " << primitives.size() << " spheres" << std::endl;
+        }
 
         // Start timing for educational performance monitoring
         auto start_time = std::chrono::high_resolution_clock::now();
@@ -78,22 +80,28 @@ public:
             current_test_count++;
             total_intersection_tests++;
             
-            std::cout << "\nTesting sphere " << i << ":" << std::endl;
-            std::cout << "  Center: (" << sphere.center.x << ", " << sphere.center.y << ", " << sphere.center.z << ")" << std::endl;
-            std::cout << "  Radius: " << sphere.radius << std::endl;
-            std::cout << "  Material index: " << sphere.material_index << std::endl;
+            if (verbose) {
+                std::cout << "\nTesting sphere " << i << ":" << std::endl;
+                std::cout << "  Center: (" << sphere.center.x << ", " << sphere.center.y << ", " << sphere.center.z << ")" << std::endl;
+                std::cout << "  Radius: " << sphere.radius << std::endl;
+                std::cout << "  Material index: " << sphere.material_index << std::endl;
+            }
 
             // Perform ray-sphere intersection test
-            Sphere::Intersection sphere_hit = sphere.intersect(ray);
+            Sphere::Intersection sphere_hit = sphere.intersect(ray, verbose);
             
             if (sphere_hit.hit) {
                 current_hit_count++;
-                std::cout << "  HIT at t = " << sphere_hit.t << std::endl;
+                if (verbose) {
+                    std::cout << "  HIT at t = " << sphere_hit.t << std::endl;
+                }
                 
                 // Check if this is the closest intersection so far
                 if (sphere_hit.t > 0.001f && sphere_hit.t < closest_hit.t) {
                     successful_intersections++;
-                    std::cout << "  NEW CLOSEST HIT (previous closest t = " << closest_hit.t << ")" << std::endl;
+                    if (verbose) {
+                        std::cout << "  NEW CLOSEST HIT (previous closest t = " << closest_hit.t << ")" << std::endl;
+                    }
                     
                     // Validate material index bounds
                     if (sphere.material_index >= 0 && sphere.material_index < static_cast<int>(materials.size())) {
@@ -104,18 +112,28 @@ public:
                         closest_hit.material = &materials[sphere.material_index];
                         closest_hit.primitive = &sphere;
                         
-                        std::cout << "  Material assigned: " << sphere.material_index << std::endl;
+                        if (verbose) {
+                            std::cout << "  Material assigned: " << sphere.material_index << std::endl;
+                        }
                     } else {
-                        std::cout << "  ERROR: Invalid material index " << sphere.material_index 
-                                  << " (valid range: 0-" << (materials.size()-1) << ")" << std::endl;
+                        if (verbose) {
+                            std::cout << "  ERROR: Invalid material index " << sphere.material_index 
+                                      << " (valid range: 0-" << (materials.size()-1) << ")" << std::endl;
+                        }
                     }
                 } else if (sphere_hit.t <= 0.001f) {
-                    std::cout << "  REJECTED: t too small (self-intersection avoidance)" << std::endl;
+                    if (verbose) {
+                        std::cout << "  REJECTED: t too small (self-intersection avoidance)" << std::endl;
+                    }
                 } else {
-                    std::cout << "  REJECTED: farther than current closest hit" << std::endl;
+                    if (verbose) {
+                        std::cout << "  REJECTED: farther than current closest hit" << std::endl;
+                    }
                 }
             } else {
-                std::cout << "  MISS" << std::endl;
+                if (verbose) {
+                    std::cout << "  MISS" << std::endl;
+                }
             }
         }
 
@@ -126,35 +144,39 @@ public:
         total_intersection_time_ms += intersection_time;
 
         // Educational performance statistics output
-        std::cout << "\n=== Intersection Performance Statistics ===" << std::endl;
-        std::cout << "Current ray tests: " << current_test_count << std::endl;
-        std::cout << "Current ray hits: " << current_hit_count << std::endl;
-        std::cout << "Current ray hit rate: " << (current_test_count > 0 ? 
-                     (float)current_hit_count / current_test_count * 100.0f : 0.0f) << "%" << std::endl;
-        std::cout << "Current ray test time: " << intersection_time << "ms" << std::endl;
-        
-        std::cout << "\nCumulative statistics:" << std::endl;
-        std::cout << "Total intersection tests: " << total_intersection_tests << std::endl;
-        std::cout << "Total successful intersections: " << successful_intersections << std::endl;
-        std::cout << "Overall hit rate: " << (total_intersection_tests > 0 ? 
-                     (float)successful_intersections / total_intersection_tests * 100.0f : 0.0f) << "%" << std::endl;
-        std::cout << "Average test time: " << (total_intersection_tests > 0 ? 
-                     total_intersection_time_ms / total_intersection_tests : 0.0f) << "ms" << std::endl;
-
-        if (closest_hit.hit) {
-            std::cout << "\n=== Final Closest Hit Result ===" << std::endl;
-            std::cout << "Hit point: (" << closest_hit.point.x << ", " << closest_hit.point.y << ", " << closest_hit.point.z << ")" << std::endl;
-            std::cout << "Surface normal: (" << closest_hit.normal.x << ", " << closest_hit.normal.y << ", " << closest_hit.normal.z << ")" << std::endl;
-            std::cout << "Distance: t = " << closest_hit.t << std::endl;
-            if (closest_hit.material) {
-                std::cout << "Material color: (" << closest_hit.material->base_color.x << ", " 
-                         << closest_hit.material->base_color.y << ", " << closest_hit.material->base_color.z << ")" << std::endl;
-            }
-        } else {
-            std::cout << "\n=== No Intersection Found ===" << std::endl;
+        if (verbose) {
+            std::cout << "\n=== Intersection Performance Statistics ===" << std::endl;
+            std::cout << "Current ray tests: " << current_test_count << std::endl;
+            std::cout << "Current ray hits: " << current_hit_count << std::endl;
+            std::cout << "Current ray hit rate: " << (current_test_count > 0 ? 
+                         (float)current_hit_count / current_test_count * 100.0f : 0.0f) << "%" << std::endl;
+            std::cout << "Current ray test time: " << intersection_time << "ms" << std::endl;
+            
+            std::cout << "\nCumulative statistics:" << std::endl;
+            std::cout << "Total intersection tests: " << total_intersection_tests << std::endl;
+            std::cout << "Total successful intersections: " << successful_intersections << std::endl;
+            std::cout << "Overall hit rate: " << (total_intersection_tests > 0 ? 
+                         (float)successful_intersections / total_intersection_tests * 100.0f : 0.0f) << "%" << std::endl;
+            std::cout << "Average test time: " << (total_intersection_tests > 0 ? 
+                         total_intersection_time_ms / total_intersection_tests : 0.0f) << "ms" << std::endl;
         }
-        
-        std::cout << "=== Ray-scene intersection complete ===" << std::endl;
+
+        if (verbose) {
+            if (closest_hit.hit) {
+                std::cout << "\n=== Final Closest Hit Result ===" << std::endl;
+                std::cout << "Hit point: (" << closest_hit.point.x << ", " << closest_hit.point.y << ", " << closest_hit.point.z << ")" << std::endl;
+                std::cout << "Surface normal: (" << closest_hit.normal.x << ", " << closest_hit.normal.y << ", " << closest_hit.normal.z << ")" << std::endl;
+                std::cout << "Distance: t = " << closest_hit.t << std::endl;
+                if (closest_hit.material) {
+                    std::cout << "Material color: (" << closest_hit.material->base_color.x << ", " 
+                             << closest_hit.material->base_color.y << ", " << closest_hit.material->base_color.z << ")" << std::endl;
+                }
+            } else {
+                std::cout << "\n=== No Intersection Found ===" << std::endl;
+            }
+            
+            std::cout << "=== Ray-scene intersection complete ===" << std::endl;
+        }
         return closest_hit;
     }
 

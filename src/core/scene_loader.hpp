@@ -2,6 +2,7 @@
 #include "scene.hpp"
 #include "sphere.hpp"
 #include "../materials/lambert.hpp"
+#include "../materials/cook_torrance.hpp"
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -15,7 +16,7 @@ class SceneLoader {
 public:
     // Load scene from file with comprehensive error handling and educational output
     // Returns: Complete Scene object with primitives and materials loaded from file
-    static Scene load_from_file(const std::string& filename) {
+    static Scene load_from_file(const std::string& filename, const std::string& material_type = "lambert") {
         std::cout << "\n=== Loading Scene from File ===" << std::endl;
         std::cout << "File: " << filename << std::endl;
         
@@ -30,12 +31,12 @@ public:
         file.close();
         
         std::cout << "File loaded successfully, size: " << content.size() << " bytes" << std::endl;
-        return load_from_string(content);
+        return load_from_string(content, material_type);
     }
     
     // Parse scene from string content with educational debugging output
     // Algorithm: line-by-line parsing with material and sphere registration
-    static Scene load_from_string(const std::string& content) {
+    static Scene load_from_string(const std::string& content, const std::string& material_type = "lambert") {
         std::cout << "\n=== Parsing Scene Content ===" << std::endl;
         
         Scene scene;
@@ -62,7 +63,7 @@ public:
             line_stream >> command;
             
             if (command == "material") {
-                if (parse_material(line_stream, scene, material_name_to_index)) {
+                if (parse_material(line_stream, scene, material_name_to_index, material_type)) {
                     materials_loaded++;
                 } else {
                     std::cout << "WARNING: Failed to parse material on line " << line_number << std::endl;
@@ -97,7 +98,8 @@ private:
     // Parse material definition with error handling and validation
     // Format: material name red green blue
     static bool parse_material(std::istringstream& stream, Scene& scene, 
-                              std::map<std::string, int>& material_map) {
+                              std::map<std::string, int>& material_map, 
+                              const std::string& material_type = "lambert") {
         std::string name;
         float r, g, b;
         
@@ -117,6 +119,11 @@ private:
         }
         
         // Create material and add to scene
+        if (material_type == "cook-torrance") {
+            std::cout << "WARNING: Cook-Torrance materials not fully supported in scene files yet." << std::endl;
+            std::cout << "Creating Lambert material as fallback. Use --no-scene for Cook-Torrance testing." << std::endl;
+            std::cout << "Cook-Torrance would use: base_color=(" << r << "," << g << "," << b << "), roughness=0.3, metallic=0.0, specular=0.04" << std::endl;
+        }
         LambertMaterial material(Vector3(r, g, b));
         int material_index = scene.add_material(material);
         material_map[name] = material_index;

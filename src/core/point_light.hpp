@@ -21,24 +21,32 @@ struct PointLight {
     // Calculate direction vector from surface point to light source
     // Geometric interpretation: normalized vector pointing from surface toward light
     // Usage: needed for BRDF evaluation and n·l calculations
-    Vector3 sample_direction(const Point3& surface_point) const {
-        std::cout << "\n=== Point Light Direction Calculation ===" << std::endl;
-        std::cout << "Light position: (" << position.x << ", " << position.y << ", " << position.z << ")" << std::endl;
-        std::cout << "Surface point: (" << surface_point.x << ", " << surface_point.y << ", " << surface_point.z << ")" << std::endl;
+    Vector3 sample_direction(const Point3& surface_point, bool verbose = true) const {
+        if (verbose) {
+            std::cout << "\n=== Point Light Direction Calculation ===" << std::endl;
+            std::cout << "Light position: (" << position.x << ", " << position.y << ", " << position.z << ")" << std::endl;
+            std::cout << "Surface point: (" << surface_point.x << ", " << surface_point.y << ", " << surface_point.z << ")" << std::endl;
+        }
         
         // Calculate displacement vector from surface to light
         Vector3 displacement = position - surface_point;
-        std::cout << "Displacement vector: (" << displacement.x << ", " << displacement.y << ", " << displacement.z << ")" << std::endl;
+        if (verbose) {
+            std::cout << "Displacement vector: (" << displacement.x << ", " << displacement.y << ", " << displacement.z << ")" << std::endl;
+        }
         
         // Calculate distance for verification
         float distance = displacement.length();
-        std::cout << "Distance to light: " << distance << std::endl;
+        if (verbose) {
+            std::cout << "Distance to light: " << distance << std::endl;
+        }
         
         // Normalize to get unit direction vector
         Vector3 direction = displacement.normalize();
-        std::cout << "Normalized direction: (" << direction.x << ", " << direction.y << ", " << direction.z << ")" << std::endl;
-        std::cout << "Direction length verification: " << direction.length() << " (should be ≈ 1.0)" << std::endl;
-        std::cout << "=== Direction calculation complete ===" << std::endl;
+        if (verbose) {
+            std::cout << "Normalized direction: (" << direction.x << ", " << direction.y << ", " << direction.z << ")" << std::endl;
+            std::cout << "Direction length verification: " << direction.length() << " (should be ≈ 1.0)" << std::endl;
+            std::cout << "=== Direction calculation complete ===" << std::endl;
+        }
         
         return direction;
     }
@@ -47,19 +55,25 @@ struct PointLight {
     // Physical law: inverse square law - irradiance ∝ 1/distance²
     // Mathematical formula: E = (I * color) / (4π * distance²)
     // Result: incident radiance for use in rendering equation
-    Vector3 calculate_irradiance(const Point3& surface_point) const {
-        std::cout << "\n=== Point Light Irradiance Calculation ===" << std::endl;
-        std::cout << "Light intensity: " << intensity << std::endl;
-        std::cout << "Light color: (" << color.x << ", " << color.y << ", " << color.z << ")" << std::endl;
+    Vector3 calculate_irradiance(const Point3& surface_point, bool verbose = true) const {
+        if (verbose) {
+            std::cout << "\n=== Point Light Irradiance Calculation ===" << std::endl;
+            std::cout << "Light intensity: " << intensity << std::endl;
+            std::cout << "Light color: (" << color.x << ", " << color.y << ", " << color.z << ")" << std::endl;
+        }
         
         // Calculate distance from light to surface point
         Vector3 displacement = position - surface_point;
         float distance = displacement.length();
-        std::cout << "Distance to surface: " << distance << std::endl;
+        if (verbose) {
+            std::cout << "Distance to surface: " << distance << std::endl;
+        }
         
         // Handle degenerate case: light at surface point
         if (distance < 1e-6f) {
-            std::cout << "WARNING: Light and surface point are coincident - returning zero irradiance" << std::endl;
+            if (verbose) {
+                std::cout << "WARNING: Light and surface point are coincident - returning zero irradiance" << std::endl;
+            }
             return Vector3(0, 0, 0);
         }
         
@@ -67,19 +81,27 @@ struct PointLight {
         // Factor of 4π comes from solid angle of complete sphere
         float distance_squared = distance * distance;
         float falloff_factor = 1.0f / (4.0f * M_PI * distance_squared);
-        std::cout << "Distance squared: " << distance_squared << std::endl;
-        std::cout << "Falloff factor (1/4πd²): " << falloff_factor << std::endl;
+        if (verbose) {
+            std::cout << "Distance squared: " << distance_squared << std::endl;
+            std::cout << "Falloff factor (1/4πd²): " << falloff_factor << std::endl;
+        }
         
         // Calculate final irradiance: intensity * color * falloff
         Vector3 irradiance = color * (intensity * falloff_factor);
-        std::cout << "Final irradiance: (" << irradiance.x << ", " << irradiance.y << ", " << irradiance.z << ")" << std::endl;
+        if (verbose) {
+            std::cout << "Final irradiance: (" << irradiance.x << ", " << irradiance.y << ", " << irradiance.z << ")" << std::endl;
+        }
         
         // Verify irradiance is non-negative
         if (irradiance.x < 0 || irradiance.y < 0 || irradiance.z < 0) {
-            std::cout << "WARNING: Negative irradiance detected - this violates physical laws" << std::endl;
+            if (verbose) {
+                std::cout << "WARNING: Negative irradiance detected - this violates physical laws" << std::endl;
+            }
         }
         
-        std::cout << "=== Irradiance calculation complete ===" << std::endl;
+        if (verbose) {
+            std::cout << "=== Irradiance calculation complete ===" << std::endl;
+        }
         return irradiance;
     }
     

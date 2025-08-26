@@ -8,6 +8,7 @@
 #include "core/scene_loader.hpp"
 #include "core/point_light.hpp"
 #include "materials/lambert.hpp"
+#include "materials/cook_torrance.hpp"
 #include "core/camera.hpp"
 #include "core/image.hpp"
 #include "core/performance_timer.hpp"
@@ -39,16 +40,28 @@ int main(int argc, char* argv[]) {
             std::cout << "\nScene parameters:" << std::endl;
             std::cout << "--scene <filename>    Load scene from file (default: assets/showcase_scene.scene)" << std::endl;
             std::cout << "--no-scene            Use hardcoded single sphere for compatibility" << std::endl;
+            std::cout << "\nMaterial parameters (Cook-Torrance BRDF - Story 3.1):" << std::endl;
+            std::cout << "--material <type>     Material type: lambert, cook-torrance (default: lambert)" << std::endl;
+            std::cout << "--roughness <value>   Surface roughness for Cook-Torrance (0.0-1.0, default: 0.5)" << std::endl;
+            std::cout << "--metallic <value>    Metallic parameter for Cook-Torrance (0.0-1.0, default: 0.0)" << std::endl;
+            std::cout << "--specular <value>    Specular reflectance for dielectrics (0.0-1.0, default: 0.04)" << std::endl;
+            std::cout << "\nDebug and verbosity parameters:" << std::endl;
+            std::cout << "--quiet               Minimal output (no educational breakdowns, errors only)" << std::endl;
+            std::cout << "--verbose             Full educational output (default behavior)" << std::endl;
             std::cout << "\nQuick presets:" << std::endl;
             std::cout << "--preset showcase     Epic 2 showcase (1024x768, complex scene, optimal camera)" << std::endl;
             std::cout << "--showcase            Shorthand for --preset showcase" << std::endl;
+            std::cout << "--preset cook-torrance Cook-Torrance demo (1024x1024, single sphere only, scene files not supported)" << std::endl;
+            std::cout << "--cook-torrance       Shorthand for --preset cook-torrance" << std::endl;
             std::cout << "--preset performance  Fast render (512x512, simple scene, basic camera)" << std::endl;
             std::cout << "--performance         Shorthand for --preset performance" << std::endl;
             std::cout << "--preset quality      High quality (1024x1024, showcase scene, wide FOV)" << std::endl;
             std::cout << "--quality             Shorthand for --preset quality" << std::endl;
-            std::cout << "\nScene file format:" << std::endl;
+            std::cout << "\nScene file format (Lambert materials only):" << std::endl;
             std::cout << "material <name> <r> <g> <b>  - Define material with RGB albedo" << std::endl;
             std::cout << "sphere <x> <y> <z> <radius> <material>  - Add sphere to scene" << std::endl;
+            std::cout << "\nNOTE: Scene files only support Lambert materials. For Cook-Torrance materials," << std::endl;
+            std::cout << "      use --cook-torrance preset (single sphere) or --no-scene with --material cook-torrance" << std::endl;
             return 0;
         }
     }
@@ -58,6 +71,15 @@ int main(int argc, char* argv[]) {
     std::string scene_filename = "../assets/showcase_scene.scene";  // Enhanced showcase scene
     bool use_scene_file = true;
     Resolution image_resolution = Resolution::parse_from_string("1024x768");  // High-quality 4:3 aspect ratio
+    
+    // Cook-Torrance material parameters (Story 3.1)
+    std::string material_type = "lambert";  // Default to Lambert for compatibility
+    float roughness_param = 0.5f;          // Medium roughness
+    float metallic_param = 0.0f;           // Dielectric (non-metal) by default
+    float specular_param = 0.04f;          // Typical dielectric F0
+    
+    // Debug and verbosity control parameters
+    bool quiet_mode = false;               // Minimal output mode
     
     for (int i = 1; i < argc; i++) {
         if (std::strcmp(argv[i], "--scene") == 0 && i + 1 < argc) {
@@ -89,6 +111,14 @@ int main(int argc, char* argv[]) {
                 scene_filename = "../assets/showcase_scene.scene";
                 image_resolution = Resolution::parse_from_string("1024x768");
                 std::cout << "Epic 2 Showcase preset: 1024x768, complex scene, optimal camera" << std::endl;
+            } else if (preset == "cook-torrance") {
+                // Cook-Torrance Demo - single sphere with Cook-Torrance material (scene files not supported)
+                use_scene_file = false;  // Force single sphere mode - scene files don't support Cook-Torrance
+                image_resolution = Resolution::parse_from_string("1024x1024");
+                material_type = "cook-torrance";
+                quiet_mode = false;  // Keep educational output
+                std::cout << "Cook-Torrance Demo preset: 1024x1024, single sphere with Cook-Torrance material" << std::endl;
+                std::cout << "NOTE: Scene files do not support Cook-Torrance materials - using single sphere mode" << std::endl;
             } else if (preset == "performance") {
                 image_resolution = Resolution::MEDIUM;  // 512x512
                 scene_filename = "../assets/simple_scene.scene";
@@ -99,7 +129,7 @@ int main(int argc, char* argv[]) {
                 std::cout << "Quality preset: 1024x1024, showcase scene, maximum quality" << std::endl;
             } else {
                 std::cout << "ERROR: Unknown preset '" << preset << "'" << std::endl;
-                std::cout << "Available presets: showcase, performance, quality" << std::endl;
+                std::cout << "Available presets: showcase, cook-torrance, performance, quality" << std::endl;
                 return 1;
             }
             i++;  // Skip next argument since we consumed it
@@ -108,6 +138,14 @@ int main(int argc, char* argv[]) {
             image_resolution = Resolution::parse_from_string("1024x768");
             std::cout << "Using preset: showcase" << std::endl;
             std::cout << "Epic 2 Showcase preset: 1024x768, complex scene, optimal camera" << std::endl;
+        } else if (std::strcmp(argv[i], "--cook-torrance") == 0) {
+            use_scene_file = false;  // Force single sphere mode - scene files don't support Cook-Torrance
+            image_resolution = Resolution::parse_from_string("1024x1024");
+            material_type = "cook-torrance";
+            quiet_mode = false;
+            std::cout << "Using preset: cook-torrance" << std::endl;
+            std::cout << "Cook-Torrance Demo preset: 1024x1024, single sphere with Cook-Torrance material" << std::endl;
+            std::cout << "NOTE: Scene files do not support Cook-Torrance materials - using single sphere mode" << std::endl;
         } else if (std::strcmp(argv[i], "--performance") == 0) {
             image_resolution = Resolution::MEDIUM;  // 512x512
             scene_filename = "../assets/simple_scene.scene";
@@ -118,12 +156,48 @@ int main(int argc, char* argv[]) {
             scene_filename = "../assets/showcase_scene.scene";
             std::cout << "Using preset: quality" << std::endl;
             std::cout << "Quality preset: 1024x1024, showcase scene, maximum quality" << std::endl;
+        } else if (std::strcmp(argv[i], "--material") == 0 && i + 1 < argc) {
+            material_type = argv[i + 1];
+            std::cout << "Material type override: " << material_type << std::endl;
+            if (material_type != "lambert" && material_type != "cook-torrance") {
+                std::cout << "ERROR: Unknown material type '" << material_type << "'" << std::endl;
+                std::cout << "Supported materials: lambert, cook-torrance" << std::endl;
+                return 1;
+            }
+            i++;  // Skip next argument since we consumed it
+        } else if (std::strcmp(argv[i], "--roughness") == 0 && i + 1 < argc) {
+            roughness_param = std::stof(argv[i + 1]);
+            roughness_param = std::max(0.01f, std::min(1.0f, roughness_param));  // Clamp to valid range
+            std::cout << "Roughness override: " << roughness_param << std::endl;
+            i++;  // Skip next argument since we consumed it
+        } else if (std::strcmp(argv[i], "--metallic") == 0 && i + 1 < argc) {
+            metallic_param = std::stof(argv[i + 1]);
+            metallic_param = std::max(0.0f, std::min(1.0f, metallic_param));  // Clamp to valid range
+            std::cout << "Metallic override: " << metallic_param << std::endl;
+            i++;  // Skip next argument since we consumed it
+        } else if (std::strcmp(argv[i], "--specular") == 0 && i + 1 < argc) {
+            specular_param = std::stof(argv[i + 1]);
+            specular_param = std::max(0.0f, std::min(1.0f, specular_param));  // Clamp to valid range
+            std::cout << "Specular override: " << specular_param << std::endl;
+            i++;  // Skip next argument since we consumed it
+        } else if (std::strcmp(argv[i], "--quiet") == 0) {
+            quiet_mode = true;
+            std::cout << "Quiet mode enabled - minimal output" << std::endl;
+        } else if (std::strcmp(argv[i], "--verbose") == 0) {
+            quiet_mode = false;
+            std::cout << "Verbose mode enabled - full educational output" << std::endl;
         } else if (strncmp(argv[i], "--", 2) == 0) {
             // Check if it's a known camera argument (handled later by camera.set_from_command_line_args)
             if (std::strcmp(argv[i], "--camera-pos") == 0 || 
                 std::strcmp(argv[i], "--camera-target") == 0 || 
-                std::strcmp(argv[i], "--fov") == 0) {
-                // Valid camera argument, skip it and its parameter
+                std::strcmp(argv[i], "--fov") == 0 ||
+                std::strcmp(argv[i], "--material") == 0 ||
+                std::strcmp(argv[i], "--roughness") == 0 ||
+                std::strcmp(argv[i], "--metallic") == 0 ||
+                std::strcmp(argv[i], "--specular") == 0 ||
+                std::strcmp(argv[i], "--quiet") == 0 ||
+                std::strcmp(argv[i], "--verbose") == 0) {
+                // Valid camera or material argument, skip it and its parameter
                 if (i + 1 < argc) i++; // Skip parameter if it exists
             } else {
                 // Unknown argument starting with --
@@ -619,7 +693,7 @@ int main(int argc, char* argv[]) {
     
     if (use_scene_file) {
         std::cout << "Loading scene from file: " << scene_filename << std::endl;
-        render_scene = SceneLoader::load_from_file(scene_filename);
+        render_scene = SceneLoader::load_from_file(scene_filename, material_type);
         
         if (render_scene.primitives.empty()) {
             std::cout << "WARNING: Scene loading failed or produced empty scene, creating default sphere" << std::endl;
@@ -632,12 +706,25 @@ int main(int argc, char* argv[]) {
     
     if (!use_scene_file) {
         std::cout << "Creating default single-sphere scene for compatibility" << std::endl;
-        // Fallback to single sphere for backwards compatibility
-        LambertMaterial default_material(Vector3(0.7f, 0.3f, 0.3f));  // Reddish diffuse
-        int material_idx = render_scene.add_material(default_material);
-        Sphere default_sphere(Point3(0, 0, -3), 1.0f, material_idx);
-        render_scene.add_sphere(default_sphere);
-        render_scene.print_scene_statistics();
+        std::cout << "Selected material type: " << material_type << std::endl;
+        
+        if (material_type == "cook-torrance") {
+            if (!quiet_mode) {
+                std::cout << "\n=== Cook-Torrance Material Configuration ===" << std::endl;
+                std::cout << "Base Color: (0.7, 0.3, 0.3) - Reddish surface" << std::endl;
+                std::cout << "Roughness: " << roughness_param << std::endl;
+                std::cout << "Metallic: " << metallic_param << std::endl;
+                std::cout << "Specular: " << specular_param << std::endl;
+                std::cout << "\nUsing Cook-Torrance rendering path (bypassing Scene system)" << std::endl;
+            }
+        } else {
+            // Use Scene system for Lambert materials
+            LambertMaterial default_material(Vector3(0.7f, 0.3f, 0.3f));  // Reddish diffuse
+            int material_idx = render_scene.add_material(default_material);
+            Sphere default_sphere(Point3(0, 0, -3), 1.0f, material_idx, !quiet_mode);
+            render_scene.add_sphere(default_sphere);
+            render_scene.print_scene_statistics();
+        }
     }
     
     // Image buffer creation using Resolution with performance monitoring
@@ -668,7 +755,7 @@ int main(int argc, char* argv[]) {
     
     // Initialize comprehensive progress reporting (Story 2.4 AC: 4)
     int total_pixels = image_width * image_height;
-    ProgressReporter progress_reporter(total_pixels, &performance_timer);
+    ProgressReporter progress_reporter(total_pixels, &performance_timer, quiet_mode);
     
     // Multi-ray pixel sampling: one ray per pixel with comprehensive progress tracking
     for (int y = 0; y < image_height; y++) {
@@ -686,40 +773,88 @@ int main(int argc, char* argv[]) {
             performance_timer.increment_counter(PerformanceTimer::RAY_GENERATION);
             rays_generated++;
             
-            // Phase 2: Intersection Testing with performance tracking
-            performance_timer.start_phase(PerformanceTimer::INTERSECTION_TESTING);
-            Scene::Intersection intersection = render_scene.intersect(pixel_ray);
-            performance_timer.end_phase(PerformanceTimer::INTERSECTION_TESTING);
-            performance_timer.increment_counter(PerformanceTimer::INTERSECTION_TESTING);
-            intersection_tests++;
-            
             Vector3 pixel_color(0, 0, 0);  // Default background color (black)
             
-            if (intersection.hit) {
-                // Phase 3: Shading Calculation with detailed timing
-                performance_timer.start_phase(PerformanceTimer::SHADING_CALCULATION);
-                shading_calculations++;
+            if (material_type == "cook-torrance") {
+                // Cook-Torrance rendering path (bypass Scene system)
+                performance_timer.start_phase(PerformanceTimer::INTERSECTION_TESTING);
                 
-                // Light evaluation
-                Vector3 light_direction = image_light.sample_direction(intersection.point);
-                Vector3 incident_irradiance = image_light.calculate_irradiance(intersection.point);
+                // Direct sphere intersection (single sphere at (0,0,-3) with radius 1.0)
+                Point3 sphere_center(0, 0, -3);
+                float sphere_radius = 1.0f;
+                Sphere cook_torrance_sphere(sphere_center, sphere_radius, 0, !quiet_mode);
+                Sphere::Intersection sphere_hit = cook_torrance_sphere.intersect(pixel_ray, !quiet_mode);
                 
-                // View direction (from surface to camera)
-                Vector3 view_direction = (camera_position - intersection.point).normalize();
+                performance_timer.end_phase(PerformanceTimer::INTERSECTION_TESTING);
+                performance_timer.increment_counter(PerformanceTimer::INTERSECTION_TESTING);
+                intersection_tests++;
                 
-                // Complete light transport using material's Lambert BRDF
-                pixel_color = intersection.material->scatter_light(
-                    light_direction, 
-                    view_direction, 
-                    intersection.normal, 
-                    incident_irradiance
-                );
-                performance_timer.end_phase(PerformanceTimer::SHADING_CALCULATION);
-                performance_timer.increment_counter(PerformanceTimer::SHADING_CALCULATION);
+                if (sphere_hit.hit) {
+                    // Phase 3: Cook-Torrance Shading Calculation
+                    performance_timer.start_phase(PerformanceTimer::SHADING_CALCULATION);
+                    shading_calculations++;
+                    
+                    // Create Cook-Torrance material using command-line base_color
+                    Vector3 base_color(0.7f, 0.3f, 0.3f);  // Default base color, should be configurable in future
+                    CookTorranceMaterial cook_torrance_material(base_color, roughness_param, metallic_param, specular_param, !quiet_mode);
+                    
+                    // Light evaluation
+                    Vector3 light_direction = image_light.sample_direction(sphere_hit.point, !quiet_mode);
+                    Vector3 incident_irradiance = image_light.calculate_irradiance(sphere_hit.point, !quiet_mode);
+                    
+                    // View direction (from surface to camera)
+                    Vector3 view_direction = (camera_position - sphere_hit.point).normalize();
+                    
+                    // Cook-Torrance BRDF evaluation
+                    pixel_color = cook_torrance_material.scatter_light(
+                        light_direction, 
+                        view_direction, 
+                        sphere_hit.normal, 
+                        incident_irradiance,
+                        !quiet_mode
+                    );
+                    performance_timer.end_phase(PerformanceTimer::SHADING_CALCULATION);
+                    performance_timer.increment_counter(PerformanceTimer::SHADING_CALCULATION);
+                } else {
+                    // No intersection - background color
+                    background_pixels++;
+                    pixel_color = Vector3(0.1f, 0.1f, 0.15f);  // Dark blue background
+                }
             } else {
-                // No intersection - background color
-                background_pixels++;
-                pixel_color = Vector3(0.1f, 0.1f, 0.15f);  // Dark blue background
+                // Lambert rendering path (use Scene system)
+                performance_timer.start_phase(PerformanceTimer::INTERSECTION_TESTING);
+                Scene::Intersection intersection = render_scene.intersect(pixel_ray, !quiet_mode);
+                performance_timer.end_phase(PerformanceTimer::INTERSECTION_TESTING);
+                performance_timer.increment_counter(PerformanceTimer::INTERSECTION_TESTING);
+                intersection_tests++;
+                
+                if (intersection.hit) {
+                    // Phase 3: Lambert Shading Calculation
+                    performance_timer.start_phase(PerformanceTimer::SHADING_CALCULATION);
+                    shading_calculations++;
+                    
+                    // Light evaluation
+                    Vector3 light_direction = image_light.sample_direction(intersection.point, !quiet_mode);
+                    Vector3 incident_irradiance = image_light.calculate_irradiance(intersection.point, !quiet_mode);
+                    
+                    // View direction (from surface to camera)
+                    Vector3 view_direction = (camera_position - intersection.point).normalize();
+                    
+                    // Lambert BRDF evaluation
+                    pixel_color = intersection.material->scatter_light(
+                        light_direction, 
+                        view_direction, 
+                        intersection.normal, 
+                        incident_irradiance,
+                        !quiet_mode
+                    );
+                    performance_timer.end_phase(PerformanceTimer::SHADING_CALCULATION);
+                    performance_timer.increment_counter(PerformanceTimer::SHADING_CALCULATION);
+                } else {
+                    // No intersection - background color
+                    background_pixels++;
+                    pixel_color = Vector3(0.1f, 0.1f, 0.15f);  // Dark blue background
+                }
             }
             
             // Store pixel in image buffer (no additional timing - included in IMAGE_OUTPUT)
@@ -825,7 +960,22 @@ int main(int argc, char* argv[]) {
     
     // Display final scene performance statistics
     std::cout << "\n=== Final Scene Performance Statistics ===" << std::endl;
-    render_scene.print_scene_statistics();
+    if (material_type == "cook-torrance") {
+        // Special statistics for Cook-Torrance direct rendering path
+        std::cout << "=== Scene Statistics ===" << std::endl;
+        std::cout << "Geometry:" << std::endl;
+        std::cout << "  Spheres: 1 (single Cook-Torrance sphere, direct rendering)" << std::endl;
+        std::cout << "  Materials: 1 (Cook-Torrance material)" << std::endl;
+        std::cout << "\nPerformance Statistics:" << std::endl;
+        std::cout << "  Total intersection tests: " << intersection_tests << std::endl;
+        std::cout << "  Successful intersections: " << shading_calculations << std::endl;
+        std::cout << "  Hit rate: " << (intersection_tests > 0 ? 
+                     (float)shading_calculations / intersection_tests * 100.0f : 0.0f) << "%" << std::endl;
+        std::cout << "  Note: Direct rendering path bypasses Scene system for Cook-Torrance materials" << std::endl;
+        std::cout << "=== Scene statistics complete ===" << std::endl;
+    } else {
+        render_scene.print_scene_statistics();
+    }
     
     std::cout << "\n=== Image Generation and Pixel Sampling Complete ===" << std::endl;
     std::cout << "Successfully generated " << image_width << "×" << image_height << " image" << std::endl;

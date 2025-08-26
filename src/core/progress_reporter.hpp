@@ -36,6 +36,7 @@ private:
     std::chrono::steady_clock::time_point start_time;
     std::chrono::steady_clock::time_point last_update_time;
     PerformanceTimer* timer;
+    bool quiet_mode;
     
     // Progress reporting configuration
     int reporting_granularity_percent = 5;  // Report every 5%
@@ -51,18 +52,25 @@ private:
     size_t current_memory_usage = 0;
     
 public:
-    ProgressReporter(int total_pixels, PerformanceTimer* performance_timer) 
+    ProgressReporter(int total_pixels, PerformanceTimer* performance_timer, bool quiet_mode = false) 
         : total_pixels(total_pixels), completed_pixels(0), last_reported_percentage(-1),
-          timer(performance_timer) {
+          timer(performance_timer), quiet_mode(quiet_mode) {
         start_time = std::chrono::steady_clock::now();
         last_update_time = start_time;
         
-        std::cout << "\n=== Progress Reporting Initialized ===" << std::endl;
-        std::cout << "Total pixels to render: " << total_pixels << std::endl;
-        std::cout << "Progress reporting granularity: every " << reporting_granularity_percent << "%" << std::endl;
-        std::cout << "Minimum reporting interval: " << minimum_reporting_interval_seconds << " seconds" << std::endl;
-        std::cout << "Educational insights: Performance scaling and ETA calculation enabled" << std::endl;
-        std::cout << "=== Begin Rendering Progress ===" << std::endl;
+        // Adjust reporting granularity for quiet mode
+        if (quiet_mode) {
+            reporting_granularity_percent = 10;  // Report every 10% in quiet mode
+        }
+        
+        if (!quiet_mode) {
+            std::cout << "\n=== Progress Reporting Initialized ===" << std::endl;
+            std::cout << "Total pixels to render: " << total_pixels << std::endl;
+            std::cout << "Progress reporting granularity: every " << reporting_granularity_percent << "%" << std::endl;
+            std::cout << "Minimum reporting interval: " << minimum_reporting_interval_seconds << " seconds" << std::endl;
+            std::cout << "Educational insights: Performance scaling and ETA calculation enabled" << std::endl;
+            std::cout << "=== Begin Rendering Progress ===" << std::endl;
+        }
     }
     
     // Update progress with completed pixel count and optional memory usage
@@ -94,6 +102,17 @@ public:
     
     // Print detailed progress update with educational insights
     void print_progress_update(float progress_percentage, float elapsed_seconds) const {
+        if (quiet_mode) {
+            // Simple progress display for quiet mode
+            std::cout << "Progress: " << static_cast<int>(progress_percentage) << "%";
+            if (completed_pixels == total_pixels) {
+                std::cout << " - Complete!" << std::endl;
+            } else {
+                std::cout << std::endl;
+            }
+            return;
+        }
+        
         std::cout << "\n--- Rendering Progress Update ---" << std::endl;
         std::cout << std::fixed << std::setprecision(1);
         std::cout << "Progress: " << progress_percentage << "% (" 
