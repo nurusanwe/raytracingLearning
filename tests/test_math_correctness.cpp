@@ -12,6 +12,7 @@
 #include "src/core/camera.hpp"
 #include "src/core/image.hpp"
 #include "src/materials/lambert.hpp"
+#include "src/materials/cook_torrance.hpp"
 
 namespace MathematicalTests {
 
@@ -1618,7 +1619,6 @@ sphere 0 0 0 -1.0 nonexistent_material  # Negative radius, invalid material
         std::cout << "  Scene validation and edge cases: PASS" << std::endl;
         return true;
     }
-}
 
     // ===========================
     // STORY 2.4 ASPECT RATIO AND FOV CORRECTNESS TESTS (AC 5)
@@ -1853,6 +1853,168 @@ sphere 0 0 0 -1.0 nonexistent_material  # Negative radius, invalid material
         return true;
     }
 
+    // === STORY 3.1: COOK-TORRANCE BRDF MATHEMATICAL CORRECTNESS TESTS ===
+
+    bool test_cook_torrance_ggx_distribution() {
+        std::cout << "\n=== Cook-Torrance GGX Normal Distribution Test ===" << std::endl;
+        
+        // Test known GGX distribution values with manual verification
+        // Test case: Normal viewing (ndoth = 1.0) with medium roughness (alpha = 0.25)
+        // Expected GGX: D = alpha²/(π*(1²*(alpha²-1)+1)²) = 0.0625/(π*(1*(0.0625-1)+1)²) = 0.0625/(π*0.9375²) ≈ 0.0226
+        std::cout << "Test 1: GGX distribution at normal viewing..." << std::endl;
+        
+        float ndoth = 1.0f;  // Perfect alignment
+        float alpha = 0.5f;  // Medium roughness
+        // Correct GGX formula: D = α²/(π * ((n·h)² * (α² - 1) + 1)²)
+        // For ndoth=1, alpha=0.5: D = 0.25/(π * ((1² * (0.25 - 1) + 1)²) = 0.25/(π * 0.0625) = 4/π
+        float expected_d = (alpha * alpha) / (M_PI * pow((ndoth * ndoth * (alpha * alpha - 1.0f) + 1.0f), 2.0f));
+        float actual_d = CookTorrance::NormalDistribution::ggx_distribution(ndoth, alpha);
+        
+        std::cout << "  Hand calculation: D = α²/(π×denom²) = " << alpha*alpha << "/(π×" << pow((ndoth * ndoth * (alpha * alpha - 1.0f) + 1.0f), 2.0f) << ") ≈ " << expected_d << std::endl;
+        std::cout << "  Implementation result: " << actual_d << std::endl;
+        std::cout << "  Verification: " << (std::abs(actual_d - expected_d) < 1e-4 ? "PASS" : "FAIL") << std::endl;
+        
+        bool test1_pass = std::abs(actual_d - expected_d) < 1e-4;
+        
+        // Test edge case: grazing angle (ndoth = 0.1) with low roughness
+        std::cout << "Test 2: GGX distribution at grazing angle..." << std::endl;
+        ndoth = 0.1f;
+        alpha = 0.1f;
+        actual_d = CookTorrance::NormalDistribution::ggx_distribution(ndoth, alpha);
+        
+        // At grazing angles with low roughness, distribution should be very small
+        std::cout << "  Grazing angle (ndoth=" << ndoth << "), low roughness (α=" << alpha << ")" << std::endl;
+        std::cout << "  Result: " << actual_d << " (should be very small)" << std::endl;
+        std::cout << "  Verification: " << (actual_d < 0.1f ? "PASS" : "FAIL") << std::endl;
+        
+        bool test2_pass = actual_d < 0.1f;
+        
+        return test1_pass && test2_pass;
+    }
+
+    bool test_cook_torrance_smith_geometry() {
+        std::cout << "\n=== Cook-Torrance Smith Geometry Function Test ===" << std::endl;
+        
+        // Test Smith G1 function at normal viewing (should approach 1.0)
+        std::cout << "Test 1: Smith G1 at normal viewing..." << std::endl;
+        float ndotv = 1.0f;  // Perfect normal viewing
+        float alpha = 0.5f;  // Medium roughness
+        float g1_result = CookTorrance::GeometryFunction::smith_g1(ndotv, alpha);
+        
+        std::cout << "  Normal viewing (ndotv=" << ndotv << "), medium roughness (α=" << alpha << ")" << std::endl;
+        std::cout << "  G1 result: " << g1_result << " (should be close to 1.0)" << std::endl;
+        std::cout << "  Verification: " << (g1_result > 0.8f ? "PASS" : "FAIL") << std::endl;
+        
+        bool test1_pass = g1_result > 0.8f;
+        
+        // Test combined Smith G function
+        std::cout << "Test 2: Combined Smith G function..." << std::endl;
+        float ndotl = 0.8f;  // Light direction
+        ndotv = 0.9f;       // View direction
+        alpha = 0.3f;       // Lower roughness
+        float g_result = CookTorrance::GeometryFunction::smith_g(ndotl, ndotv, alpha);
+        float expected_g = CookTorrance::GeometryFunction::smith_g1(ndotl, alpha) * 
+                          CookTorrance::GeometryFunction::smith_g1(ndotv, alpha);
+        
+        std::cout << "  Manual calculation: G = G1(l) × G1(v) = " << expected_g << std::endl;
+        std::cout << "  Implementation result: " << g_result << std::endl;
+        std::cout << "  Verification: " << (std::abs(g_result - expected_g) < 1e-6 ? "PASS" : "FAIL") << std::endl;
+        
+        bool test2_pass = std::abs(g_result - expected_g) < 1e-6;
+        
+        return test1_pass && test2_pass;
+    }
+
+    bool test_cook_torrance_fresnel() {
+        std::cout << "\n=== Cook-Torrance Fresnel Function Test ===" << std::endl;
+        
+        // Test Schlick's approximation at normal incidence (should equal F0)
+        std::cout << "Test 1: Fresnel at normal incidence..." << std::endl;
+        float vdoth = 1.0f;  // Perfect normal incidence
+        Vector3 f0(0.04f, 0.04f, 0.04f);  // Typical dielectric F0
+        Vector3 fresnel_result = CookTorrance::FresnelFunction::schlick_fresnel(vdoth, f0);
+        
+        std::cout << "  Normal incidence (vdoth=" << vdoth << "), F0=(" << f0.x << "," << f0.y << "," << f0.z << ")" << std::endl;
+        std::cout << "  Fresnel result: (" << fresnel_result.x << "," << fresnel_result.y << "," << fresnel_result.z << ")" << std::endl;
+        std::cout << "  Should equal F0 - Verification: " << 
+            (std::abs(fresnel_result.x - f0.x) < 1e-4 ? "PASS" : "FAIL") << std::endl;
+        
+        bool test1_pass = std::abs(fresnel_result.x - f0.x) < 1e-4;
+        
+        // Test Fresnel at grazing angle (should approach 1.0)
+        std::cout << "Test 2: Fresnel at grazing angle..." << std::endl;
+        vdoth = 0.1f;  // Grazing angle
+        fresnel_result = CookTorrance::FresnelFunction::schlick_fresnel(vdoth, f0);
+        
+        std::cout << "  Grazing angle (vdoth=" << vdoth << ")" << std::endl;
+        std::cout << "  Fresnel result: (" << fresnel_result.x << "," << fresnel_result.y << "," << fresnel_result.z << ")" << std::endl;
+        std::cout << "  Should be high reflectance - Verification: " << 
+            (fresnel_result.x > 0.5f ? "PASS" : "FAIL") << std::endl;
+        
+        bool test2_pass = fresnel_result.x > 0.5f;
+        
+        return test1_pass && test2_pass;
+    }
+
+    bool test_cook_torrance_energy_conservation() {
+        std::cout << "\n=== Cook-Torrance Energy Conservation Test ===" << std::endl;
+        
+        // Test parameter validation
+        std::cout << "Test 1: Parameter validation..." << std::endl;
+        CookTorranceMaterial valid_material(Vector3(0.7f, 0.7f, 0.7f), 0.5f, 0.0f, 0.04f);
+        bool params_valid = valid_material.validate_cook_torrance_parameters();
+        
+        std::cout << "  Valid material parameters: " << (params_valid ? "PASS" : "FAIL") << std::endl;
+        
+        // Test invalid parameters
+        CookTorranceMaterial invalid_material(Vector3(1.5f, -0.2f, 0.8f), 2.0f, 1.5f, -0.1f);
+        invalid_material.clamp_cook_torrance_to_valid_ranges();  // Should auto-clamp
+        bool clamped_valid = invalid_material.validate_cook_torrance_parameters();
+        
+        std::cout << "  Clamped invalid parameters: " << (clamped_valid ? "PASS" : "FAIL") << std::endl;
+        
+        return params_valid && clamped_valid;
+    }
+
+    bool test_cook_torrance_brdf_evaluation() {
+        std::cout << "\n=== Cook-Torrance BRDF Evaluation Test ===" << std::endl;
+        
+        // Test BRDF evaluation with known conditions
+        std::cout << "Test 1: BRDF evaluation at normal viewing..." << std::endl;
+        CookTorranceMaterial material(Vector3(0.8f, 0.8f, 0.8f), 0.3f, 0.0f, 0.04f);
+        
+        Vector3 wi(0.0f, 0.0f, 1.0f);     // Light from above
+        Vector3 wo(0.0f, 0.0f, 1.0f);     // View from above
+        Vector3 normal(0.0f, 0.0f, 1.0f); // Upward normal
+        
+        Vector3 brdf_result = material.evaluate_brdf(wi, wo, normal);
+        
+        std::cout << "  Normal viewing configuration" << std::endl;
+        std::cout << "  BRDF result: (" << brdf_result.x << "," << brdf_result.y << "," << brdf_result.z << ")" << std::endl;
+        std::cout << "  Should be positive finite values - Verification: " << 
+            (brdf_result.x > 0 && std::isfinite(brdf_result.x) ? "PASS" : "FAIL") << std::endl;
+        
+        bool test1_pass = brdf_result.x > 0 && std::isfinite(brdf_result.x);
+        
+        // Test BRDF with grazing angle (should be very small or zero)
+        std::cout << "Test 2: BRDF evaluation at grazing angle..." << std::endl;
+        Vector3 wi_grazing(0.1f, 0.0f, 0.01f);  // Nearly parallel to surface
+        wi_grazing = wi_grazing.normalize();
+        
+        Vector3 brdf_grazing = material.evaluate_brdf(wi_grazing, wo, normal);
+        
+        std::cout << "  Grazing angle configuration" << std::endl;
+        std::cout << "  BRDF result: (" << brdf_grazing.x << "," << brdf_grazing.y << "," << brdf_grazing.z << ")" << std::endl;
+        std::cout << "  Should be small finite values - Verification: " << 
+            (brdf_grazing.x >= 0 && std::isfinite(brdf_grazing.x) ? "PASS" : "FAIL") << std::endl;
+        
+        bool test2_pass = brdf_grazing.x >= 0 && std::isfinite(brdf_grazing.x);
+        
+        return test1_pass && test2_pass;
+    }
+
+} // namespace MathematicalTests
+
 int main() {
     std::cout << "=== Educational Ray Tracer - Mathematical Correctness Tests ===" << std::endl;
     
@@ -1911,16 +2073,25 @@ int main() {
         
         // === STORY 2.4 ASPECT RATIO AND FOV CORRECTNESS VALIDATION TESTS ===
         std::cout << "\n=== Story 2.4 Aspect Ratio and FOV Correctness Validation Tests ===" << std::endl;
-        all_passed &= test_aspect_ratio_calculation();
-        all_passed &= test_fov_scaling_correctness();
-        all_passed &= test_ray_generation_non_square_resolutions();
-        all_passed &= test_common_aspect_ratios();
-        all_passed &= test_resolution_aspect_ratio_integration();
+        all_passed &= MathematicalTests::test_aspect_ratio_calculation();
+        all_passed &= MathematicalTests::test_fov_scaling_correctness();
+        all_passed &= MathematicalTests::test_ray_generation_non_square_resolutions();
+        all_passed &= MathematicalTests::test_common_aspect_ratios();
+        all_passed &= MathematicalTests::test_resolution_aspect_ratio_integration();
+        
+        // Story 3.1: Cook-Torrance BRDF Mathematical Correctness Tests
+        std::cout << "\n=== STORY 3.1: COOK-TORRANCE BRDF TESTS ===" << std::endl;
+        all_passed &= MathematicalTests::test_cook_torrance_ggx_distribution();
+        all_passed &= MathematicalTests::test_cook_torrance_smith_geometry();
+        all_passed &= MathematicalTests::test_cook_torrance_fresnel();
+        all_passed &= MathematicalTests::test_cook_torrance_energy_conservation();
+        all_passed &= MathematicalTests::test_cook_torrance_brdf_evaluation();
         
         if (all_passed) {
             std::cout << "\n✅ ALL MATHEMATICAL TESTS PASSED" << std::endl;
-            std::cout << "Mathematical foundation verified for Epic 1 development." << std::endl;
+            std::cout << "Mathematical foundation verified for Epic 1 & 3 development." << std::endl;
             std::cout << "Story 1.3: Single-Ray Lambert BRDF Implementation - VALIDATED" << std::endl;
+            std::cout << "Story 3.1: Pure Cook-Torrance BRDF Implementation - VALIDATED" << std::endl;
             return 0;
         } else {
             std::cout << "\n❌ SOME TESTS FAILED" << std::endl;

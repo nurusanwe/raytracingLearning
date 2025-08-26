@@ -79,25 +79,29 @@ public:
     // wi: incident light direction (pointing toward surface, normalized)
     // wo: outgoing view direction (pointing toward camera, normalized) 
     // normal: surface normal at intersection point (outward-pointing, normalized)
-    Vector3 evaluate_brdf(const Vector3& wi, const Vector3& wo, const Vector3& normal) const {
-        std::cout << "\n=== Lambert BRDF Evaluation ===" << std::endl;
-        std::cout << "Incident direction (wi): (" << wi.x << ", " << wi.y << ", " << wi.z << ")" << std::endl;
-        std::cout << "Outgoing direction (wo): (" << wo.x << ", " << wo.y << ", " << wo.z << ")" << std::endl;
-        std::cout << "Surface normal: (" << normal.x << ", " << normal.y << ", " << normal.z << ")" << std::endl;
-        std::cout << "Material albedo: (" << base_color.x << ", " << base_color.y << ", " << base_color.z << ")" << std::endl;
+    Vector3 evaluate_brdf(const Vector3& wi, const Vector3& wo, const Vector3& normal, bool verbose = true) const {
+        if (verbose) {
+            std::cout << "\n=== Lambert BRDF Evaluation ===" << std::endl;
+            std::cout << "Incident direction (wi): (" << wi.x << ", " << wi.y << ", " << wi.z << ")" << std::endl;
+            std::cout << "Outgoing direction (wo): (" << wo.x << ", " << wo.y << ", " << wo.z << ")" << std::endl;
+            std::cout << "Surface normal: (" << normal.x << ", " << normal.y << ", " << normal.z << ")" << std::endl;
+            std::cout << "Material albedo: (" << base_color.x << ", " << base_color.y << ", " << base_color.z << ")" << std::endl;
+        }
 
         // Lambert BRDF is constant for all direction pairs (perfectly diffuse)
         // Formula: f_r = ρ/π where ρ = albedo, π ensures energy conservation
         // Mathematical derivation: ∫hemisphere f_r * cos(θ) * dω = ρ when f_r = ρ/π
         Vector3 brdf_value = base_color * (1.0f / M_PI);
-        std::cout << "Lambert BRDF value: f_r = ρ/π = (" << brdf_value.x << ", " << brdf_value.y << ", " << brdf_value.z << ")" << std::endl;
-        
-        // Verify energy conservation constraint: each component ≤ 1/π
-        std::cout << "Energy conservation check: ρ/π ≤ 1/π requires ρ ≤ 1" << std::endl;
-        std::cout << "Albedo constraint satisfied: " << 
-                     (base_color.x <= 1.0f && base_color.y <= 1.0f && base_color.z <= 1.0f ? "YES" : "NO") << std::endl;
+        if (verbose) {
+            std::cout << "Lambert BRDF value: f_r = ρ/π = (" << brdf_value.x << ", " << brdf_value.y << ", " << brdf_value.z << ")" << std::endl;
+            
+            // Verify energy conservation constraint: each component ≤ 1/π
+            std::cout << "Energy conservation check: ρ/π ≤ 1/π requires ρ ≤ 1" << std::endl;
+            std::cout << "Albedo constraint satisfied: " << 
+                         (base_color.x <= 1.0f && base_color.y <= 1.0f && base_color.z <= 1.0f ? "YES" : "NO") << std::endl;
 
-        std::cout << "=== BRDF evaluation complete ===" << std::endl;
+            std::cout << "=== BRDF evaluation complete ===" << std::endl;
+        }
         return brdf_value;
     }
 
@@ -111,26 +115,32 @@ public:
     // normal: surface normal at intersection point (outward-pointing, normalized)
     // incident_radiance: incoming light energy (L_i in rendering equation)
     Vector3 scatter_light(const Vector3& light_direction, const Vector3& view_direction, 
-                         const Vector3& normal, const Vector3& incident_radiance) const {
-        std::cout << "\n=== Lambert Light Scattering Calculation ===" << std::endl;
-        std::cout << "Light direction: (" << light_direction.x << ", " << light_direction.y << ", " << light_direction.z << ")" << std::endl;
-        std::cout << "View direction: (" << view_direction.x << ", " << view_direction.y << ", " << view_direction.z << ")" << std::endl;
-        std::cout << "Surface normal: (" << normal.x << ", " << normal.y << ", " << normal.z << ")" << std::endl;
-        std::cout << "Incident radiance: (" << incident_radiance.x << ", " << incident_radiance.y << ", " << incident_radiance.z << ")" << std::endl;
+                         const Vector3& normal, const Vector3& incident_radiance, bool verbose = true) const {
+        if (verbose) {
+            std::cout << "\n=== Lambert Light Scattering Calculation ===" << std::endl;
+            std::cout << "Light direction: (" << light_direction.x << ", " << light_direction.y << ", " << light_direction.z << ")" << std::endl;
+            std::cout << "View direction: (" << view_direction.x << ", " << view_direction.y << ", " << view_direction.z << ")" << std::endl;
+            std::cout << "Surface normal: (" << normal.x << ", " << normal.y << ", " << normal.z << ")" << std::endl;
+            std::cout << "Incident radiance: (" << incident_radiance.x << ", " << incident_radiance.y << ", " << incident_radiance.z << ")" << std::endl;
+        }
 
         // Calculate cosine term: n·l (normal dot light_direction)
         // Geometric interpretation: how much surface faces toward light source
         // Physics: Lambert's cosine law - apparent brightness ∝ cos(angle)
         float cos_theta = normal.dot(light_direction);
-        std::cout << "Raw cosine term n·l = " << cos_theta << std::endl;
+        if (verbose) {
+            std::cout << "Raw cosine term n·l = " << cos_theta << std::endl;
+        }
 
         // Clamp to positive values: surfaces don't emit light when facing away
         // Physical constraint: no negative light contribution from backlit surfaces
         cos_theta = std::max(0.0f, cos_theta);
-        std::cout << "Clamped cosine term max(0, n·l) = " << cos_theta << std::endl;
+        if (verbose) {
+            std::cout << "Clamped cosine term max(0, n·l) = " << cos_theta << std::endl;
+        }
 
         // Evaluate BRDF for this direction pair
-        Vector3 brdf = evaluate_brdf(light_direction, view_direction, normal);
+        Vector3 brdf = evaluate_brdf(light_direction, view_direction, normal, verbose);
 
         // Full rendering equation evaluation: L_o = f_r * L_i * cos(θ)
         // Each component computed separately for RGB channels
@@ -140,9 +150,11 @@ public:
             brdf.z * incident_radiance.z * cos_theta   // Blue channel
         );
 
-        std::cout << "Final outgoing radiance: L_o = f_r * L_i * cos(θ) = (" 
-                  << outgoing_radiance.x << ", " << outgoing_radiance.y << ", " << outgoing_radiance.z << ")" << std::endl;
-        std::cout << "=== Light scattering calculation complete ===" << std::endl;
+        if (verbose) {
+            std::cout << "Final outgoing radiance: L_o = f_r * L_i * cos(θ) = (" 
+                      << outgoing_radiance.x << ", " << outgoing_radiance.y << ", " << outgoing_radiance.z << ")" << std::endl;
+            std::cout << "=== Light scattering calculation complete ===" << std::endl;
+        }
 
         return outgoing_radiance;
     }
