@@ -6,7 +6,7 @@
 #include "core/sphere.hpp"
 #include "core/scene.hpp"
 #include "core/scene_loader.hpp"
-#include "core/point_light.hpp"
+#include "lights/point_light.hpp"
 #include "materials/lambert.hpp"
 #include "materials/cook_torrance.hpp"
 #include "core/camera.hpp"
@@ -540,7 +540,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Sphere material albedo: (" << sphere_material.base_color.x << ", " << sphere_material.base_color.y << ", " << sphere_material.base_color.z << ")" << std::endl;
     
     // Point light source with explicit position and color
-    Point3 light_position(2, 2, -3);  // Light positioned above and to the right of sphere
+    Vector3 light_position(2, 2, -3);  // Light positioned above and to the right of sphere
     Vector3 light_color(1.0f, 1.0f, 1.0f);  // White light
     float light_intensity = 10.0f;  // Bright light to overcome distance falloff
     PointLight scene_light(light_position, light_color, light_intensity);
@@ -559,7 +559,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
-    if (!scene_light.validate_light()) {
+    if (!scene_light.validate_parameters()) {
         std::cout << "ERROR: Invalid light configuration!" << std::endl;
         return 1;
     }
@@ -584,8 +584,11 @@ int main(int argc, char* argv[]) {
     
     // Step 2: Light source evaluation
     std::cout << "\n=== Step 2: Light Source Evaluation ===" << std::endl;
-    Vector3 light_direction = scene_light.sample_direction(intersection.point);
-    Vector3 incident_irradiance = scene_light.calculate_irradiance(intersection.point);
+    float pdf;
+    Vector3 light_direction = scene_light.sample_direction(Vector3(intersection.point.x, intersection.point.y, intersection.point.z), pdf);
+    Vector3 light_dir_temp;
+    float light_distance;
+    Vector3 incident_irradiance = scene_light.illuminate(Vector3(intersection.point.x, intersection.point.y, intersection.point.z), light_dir_temp, light_distance);
     
     // Step 3: BRDF evaluation and light transport
     std::cout << "\n=== Step 3: BRDF Evaluation and Light Transport ===" << std::endl;
@@ -687,7 +690,7 @@ int main(int argc, char* argv[]) {
     
     // Scene setup: load from file or create default scene
     Scene render_scene;
-    PointLight image_light(Point3(2, 2, -3), Vector3(1.0f, 1.0f, 1.0f), 10.0f);
+    PointLight image_light(Vector3(2, 2, -3), Vector3(1.0f, 1.0f, 1.0f), 10.0f);
     
     std::cout << "\n--- Scene Configuration ---" << std::endl;
     
@@ -798,21 +801,48 @@ int main(int argc, char* argv[]) {
                     Vector3 base_color(0.7f, 0.3f, 0.3f);  // Default base color, should be configurable in future
                     CookTorranceMaterial cook_torrance_material(base_color, roughness_param, metallic_param, specular_param, !quiet_mode);
                     
-                    // Light evaluation
-                    Vector3 light_direction = image_light.sample_direction(sphere_hit.point, !quiet_mode);
-                    Vector3 incident_irradiance = image_light.calculate_irradiance(sphere_hit.point, !quiet_mode);
-                    
-                    // View direction (from surface to camera)
+                    // Multi-light accumulation for Cook-Torrance (AC2 - Story 3.2)
+                    pixel_color = Vector3(0, 0, 0);  // Initialize accumulator
+                    Vector3 surface_point = Vector3(sphere_hit.point.x, sphere_hit.point.y, sphere_hit.point.z);
                     Vector3 view_direction = (camera_position - sphere_hit.point).normalize();
                     
-                    // Cook-Torrance BRDF evaluation
-                    pixel_color = cook_torrance_material.scatter_light(
-                        light_direction, 
-                        view_direction, 
-                        sphere_hit.normal, 
-                        incident_irradiance,
-                        !quiet_mode
-                    );
+                    if (render_scene.lights.empty()) {
+                        // Fallback: Use hardcoded light for backward compatibility
+                        float pdf_fallback;
+                        Vector3 light_direction = image_light.sample_direction(surface_point, pdf_fallback);
+                        Vector3 temp_light_dir;
+                        float temp_distance;
+                        Vector3 incident_irradiance = image_light.illuminate(surface_point, temp_light_dir, temp_distance);
+                        
+                        pixel_color = cook_torrance_material.scatter_light(
+                            light_direction, view_direction, sphere_hit.normal, 
+                            incident_irradiance, !quiet_mode
+                        );
+                    } else {
+                        // Multi-light accumulation from scene for Cook-Torrance
+                        for (const auto& light : render_scene.lights) {
+                            Vector3 light_direction;
+                            float light_distance;
+                            Vector3 light_contribution = light->illuminate(surface_point, light_direction, light_distance);
+                            
+                            // Shadow ray testing (AC3)
+                            if (!light->is_occluded(surface_point, light_direction, light_distance, render_scene)) {
+                                // Cook-Torrance BRDF evaluation for this light
+                                Vector3 brdf_contribution = cook_torrance_material.scatter_light(
+                                    light_direction, view_direction, sphere_hit.normal, 
+                                    light_contribution, false  // Disable verbose per-light to avoid spam
+                                );
+                                pixel_color += brdf_contribution;
+                            }
+                        }
+                        
+                        // Educational output for multi-light Cook-Torrance (if enabled and first few pixels)
+                        if (!quiet_mode && (x + y * image_width) < 3) {
+                            std::cout << "\n=== Cook-Torrance Multi-Light Accumulation (Pixel " << (x + y * image_width) << ") ===" << std::endl;
+                            std::cout << "Scene lights: " << render_scene.lights.size() << std::endl;
+                            std::cout << "Final accumulated color: (" << pixel_color.x << ", " << pixel_color.y << ", " << pixel_color.z << ")" << std::endl;
+                        }
+                    }
                     performance_timer.end_phase(PerformanceTimer::SHADING_CALCULATION);
                     performance_timer.increment_counter(PerformanceTimer::SHADING_CALCULATION);
                 } else {
@@ -833,21 +863,48 @@ int main(int argc, char* argv[]) {
                     performance_timer.start_phase(PerformanceTimer::SHADING_CALCULATION);
                     shading_calculations++;
                     
-                    // Light evaluation
-                    Vector3 light_direction = image_light.sample_direction(intersection.point, !quiet_mode);
-                    Vector3 incident_irradiance = image_light.calculate_irradiance(intersection.point, !quiet_mode);
-                    
-                    // View direction (from surface to camera)
+                    // Multi-light accumulation (AC2 - Story 3.2)
+                    pixel_color = Vector3(0, 0, 0);  // Initialize accumulator
+                    Vector3 surface_point = Vector3(intersection.point.x, intersection.point.y, intersection.point.z);
                     Vector3 view_direction = (camera_position - intersection.point).normalize();
                     
-                    // Lambert BRDF evaluation
-                    pixel_color = intersection.material->scatter_light(
-                        light_direction, 
-                        view_direction, 
-                        intersection.normal, 
-                        incident_irradiance,
-                        !quiet_mode
-                    );
+                    if (render_scene.lights.empty()) {
+                        // Fallback: Use hardcoded light for backward compatibility
+                        float pdf_fallback;
+                        Vector3 light_direction = image_light.sample_direction(surface_point, pdf_fallback);
+                        Vector3 temp_light_dir;
+                        float temp_distance;
+                        Vector3 incident_irradiance = image_light.illuminate(surface_point, temp_light_dir, temp_distance);
+                        
+                        pixel_color = intersection.material->scatter_light(
+                            light_direction, view_direction, intersection.normal, 
+                            incident_irradiance, !quiet_mode
+                        );
+                    } else {
+                        // Multi-light accumulation from scene
+                        for (const auto& light : render_scene.lights) {
+                            Vector3 light_direction;
+                            float light_distance;
+                            Vector3 light_contribution = light->illuminate(surface_point, light_direction, light_distance);
+                            
+                            // Shadow ray testing (AC3)
+                            if (!light->is_occluded(surface_point, light_direction, light_distance, render_scene)) {
+                                // BRDF evaluation for this light
+                                Vector3 brdf_contribution = intersection.material->scatter_light(
+                                    light_direction, view_direction, intersection.normal, 
+                                    light_contribution, false  // Disable verbose per-light to avoid spam
+                                );
+                                pixel_color += brdf_contribution;
+                            }
+                        }
+                        
+                        // Educational output for multi-light (if enabled and first few pixels)
+                        if (!quiet_mode && (x + y * image_width) < 5) {
+                            std::cout << "\n=== Multi-Light Accumulation (Pixel " << (x + y * image_width) << ") ===" << std::endl;
+                            std::cout << "Scene lights: " << render_scene.lights.size() << std::endl;
+                            std::cout << "Final accumulated color: (" << pixel_color.x << ", " << pixel_color.y << ", " << pixel_color.z << ")" << std::endl;
+                        }
+                    }
                     performance_timer.end_phase(PerformanceTimer::SHADING_CALCULATION);
                     performance_timer.increment_counter(PerformanceTimer::SHADING_CALCULATION);
                 } else {

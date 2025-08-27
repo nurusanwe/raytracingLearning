@@ -6,12 +6,12 @@
 #include "../materials/lambert.hpp"
 #include "../materials/cook_torrance.hpp"
 #include "../materials/material_base.hpp"
+#include "../lights/light_base.hpp"
 #include <vector>
 #include <memory>
 #include <iostream>
 #include <chrono>
 #include <limits>
-#include <algorithm>
 
 // Scene class manages multiple primitive objects and materials for ray tracing
 // Educational focus: demonstrates ray-scene intersection algorithms and performance monitoring
@@ -24,6 +24,10 @@ public:
     // Container for polymorphic materials with index-based referencing from primitives  
     // Supports both Lambert and Cook-Torrance materials through Material base class polymorphism
     std::vector<std::unique_ptr<Material>> materials;
+    
+    // Container for polymorphic lights with multiple light type support
+    // Supports Point, Directional, and Area lights through Light base class polymorphism
+    std::vector<std::unique_ptr<Light>> lights;
     
     // Educational performance monitoring for intersection statistics
     mutable int total_intersection_tests = 0;
@@ -233,6 +237,56 @@ public:
     int add_material(const LambertMaterial& material) {
         auto lambert_material = std::make_unique<LambertMaterial>(material);
         return add_material(std::move(lambert_material));
+    }
+
+    // Add polymorphic light to scene and return its index
+    // Educational transparency: reports light assignment and validates parameters
+    // Supports Point, Directional, and Area lights through Light base class polymorphism
+    int add_light(std::unique_ptr<Light> light) {
+        std::cout << "\n=== Adding Polymorphic Light to Scene ===" << std::endl;
+        
+        if (!light) {
+            std::cout << "ERROR: Null light pointer" << std::endl;
+            return -1;
+        }
+        
+        // Validate light parameters before adding
+        if (!light->validate_parameters()) {
+            std::cout << "WARNING: Light parameters outside valid ranges" << std::endl;
+            std::cout << "Educational note: Invalid parameters may cause non-physical behavior" << std::endl;
+            light->clamp_parameters();
+            std::cout << "Parameters automatically clamped to valid ranges" << std::endl;
+        }
+        
+        // Educational light type reporting
+        std::cout << "Light Info: " << light->get_light_info() << std::endl;
+        std::cout << "Light Color: (" << light->color.x << ", " 
+                 << light->color.y << ", " << light->color.z << ")" << std::endl;
+        std::cout << "Light Intensity: " << light->intensity << " (dimensionless multiplier)" << std::endl;
+        
+        // Additional details for specific light types
+        std::string light_type_name;
+        switch (light->type) {
+            case LightType::Point:
+                light_type_name = "Point Light";
+                break;
+            case LightType::Directional:
+                light_type_name = "Directional Light";
+                break;
+            case LightType::Area:
+                light_type_name = "Area Light";
+                break;
+        }
+        std::cout << "Light Type: " << light_type_name << std::endl;
+        
+        lights.push_back(std::move(light));
+        int light_index = static_cast<int>(lights.size() - 1);
+        
+        std::cout << "Light added at index: " << light_index << std::endl;
+        std::cout << "Total lights in scene: " << lights.size() << std::endl;
+        std::cout << "=== Light addition complete ===" << std::endl;
+        
+        return light_index;
     }
 
     // Add sphere primitive to scene and return its index

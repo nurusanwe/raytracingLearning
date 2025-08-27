@@ -18,9 +18,20 @@ sphere 0.0 0.0 -5.0 1.0 red_sphere
 sphere 2.0 0.0 -6.0 0.8 blue_sphere
 sphere -1.5 1.0 -4.0 0.6 green_sphere
 
+# Lighting Section
+# Basic point light for educational visibility and material demonstration
+# Format: light_point pos_x pos_y pos_z color_r color_g color_b intensity
+light_point 2.0 2.0 -2.0 1.0 1.0 1.0 3.0
+
 # Educational Notes:
 # - Red sphere: Large central sphere for primary intersection testing
 # - Blue sphere: Offset sphere to test closest-hit logic
 # - Green sphere: Smaller sphere at different depth for depth testing
 # - All spheres positioned in front of camera (negative Z) for visibility
 # - Different radii to test intersection algorithm with varied sphere sizes
+#
+# Lighting Design:
+# - Single point light positioned above and to the right (2, 2, -2)
+# - White light (1.0, 1.0, 1.0) ensures neutral color representation
+# - Intensity 3.0 provides clear visibility without overexposure
+# - Light placement creates subtle shadows for depth perception

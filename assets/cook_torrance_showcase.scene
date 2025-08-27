@@ -80,6 +80,27 @@ sphere 0.0 -2.5 -6.0 0.7 plastic_red_glossy      # Higher F0: 0.08
 sphere 2.0 -2.5 -6.0 0.7 matte_white            # Lambert reference
 
 # ================================================
+# LIGHTING SYSTEM: OPTIMIZED FOR MATERIAL DEMONSTRATION
+# ================================================
+# Lighting setup specifically designed to showcase Cook-Torrance BRDF features
+# Emphasizes specular highlights, Fresnel effects, and material differences
+
+# Primary Directional Light: Strong directional light to emphasize Cook-Torrance vs Lambert differences
+# Positioned to create clear specular highlights across all spheres for material comparison
+# Strong intensity to make BRDF differences visible across roughness and metallic parameters
+light_directional -0.2 -0.8 -0.3 1.0 1.0 1.0 3.
+
+# Secondary Point Light: Positioned for specular highlight demonstration
+# Creates focused highlights that vary based on roughness and metallic parameters
+# Warm color temperature to enhance gold material appearance
+light_point 1.0 3.0 -2.0 1.0 0.9 0.7 3.
+
+# Soft Fill Light: Area light for subtle ambient illumination
+# Provides gentle fill lighting without overwhelming primary specular effects
+# Cool color temperature for color balance and depth
+light_area -3.0 1.0 -4.0 0.5 0.2 0.8 1.0 1.5 0.7 0.8 1.0 1.
+
+# ================================================
 # EDUCATIONAL NOTES AND LEARNING OBJECTIVES
 # ================================================
 # This scene demonstrates the following Cook-Torrance microfacet theory concepts:
@@ -121,3 +142,12 @@ sphere 2.0 -2.5 -6.0 0.7 matte_white            # Lambert reference
 # - Roughness limited to [0.01, 1.0] to prevent numerical instability
 # - F0 values appropriate for material types (0.04 typical for dielectrics)
 # - Scene layout optimized for educational comparison and visual learning
+#
+# LIGHTING DESIGN FOR MATERIAL EDUCATION:
+# - Directional light: Creates consistent specular angles across all spheres
+# - Point light: Provides focused highlights that vary by surface properties
+# - Area light: Adds subtle ambient without masking material differences
+# - Light positioning emphasizes roughness gradients (smooth → rough)
+# - Color temperatures chosen to enhance metallic vs dielectric distinctions
+# - Intensities balanced to prevent overexposure while maintaining highlight visibility
+# - Multiple light types demonstrate how different illumination affects BRDF evaluation

@@ -8,7 +8,10 @@
 #include "../src/core/sphere.hpp"
 #include "../src/core/scene.hpp"
 #include "../src/core/scene_loader.hpp"
-#include "../src/core/point_light.hpp"
+#include "../src/lights/light_base.hpp"
+#include "../src/lights/point_light.hpp"
+#include "../src/lights/directional_light.hpp"
+#include "../src/lights/area_light.hpp"
 #include "../src/core/camera.hpp"
 #include "../src/core/image.hpp"
 #include "../src/materials/lambert.hpp"
@@ -237,11 +240,13 @@ namespace MathematicalTests {
         // At distance d=1: irradiance = (1 * 1)/(4π * 1²) = 1/(4π) ≈ 0.0796
         // At distance d=2: irradiance = (1 * 1)/(4π * 4) = 1/(16π) ≈ 0.0199
         std::cout << "Test 1: Inverse square law verification..." << std::endl;
-        PointLight light(Point3(0, 0, 0), Vector3(1, 1, 1), 1.0f);  // Standard intensity
+        PointLight light(Vector3(0, 0, 0), Vector3(1, 1, 1), 1.0f);  // Standard intensity
         
         // Distance 1 test
-        Point3 point_1(1, 0, 0);  // Distance = 1
-        Vector3 irradiance_1 = light.calculate_irradiance(point_1);
+        Vector3 point_1(1, 0, 0);  // Distance = 1
+        Vector3 light_dir_1;
+        float distance_1;
+        Vector3 irradiance_1 = light.illuminate(point_1, light_dir_1, distance_1);
         float expected_irradiance_1 = 1.0f / (4.0f * M_PI * 1.0f);  // 1/(4π*1²)
         
         std::cout << "  Distance d=1:" << std::endl;
@@ -250,8 +255,10 @@ namespace MathematicalTests {
         assert(std::abs(irradiance_1.x - expected_irradiance_1) < 1e-5);
         
         // Distance 2 test
-        Point3 point_2(2, 0, 0);  // Distance = 2
-        Vector3 irradiance_2 = light.calculate_irradiance(point_2);
+        Vector3 point_2(2, 0, 0);  // Distance = 2
+        Vector3 light_dir_2;
+        float distance_2;
+        Vector3 irradiance_2 = light.illuminate(point_2, light_dir_2, distance_2);
         float expected_irradiance_2 = 1.0f / (4.0f * M_PI * 4.0f);  // 1/(4π*4)
         
         std::cout << "  Distance d=2:" << std::endl;
@@ -268,10 +275,11 @@ namespace MathematicalTests {
         
         // Test Case 2: Light direction calculation
         std::cout << "Test 2: Light direction calculation..." << std::endl;
-        PointLight directional_light(Point3(3, 4, 0), Vector3(1, 1, 1), 1.0f);
-        Point3 surface_point(0, 0, 0);
+        PointLight directional_light(Vector3(3, 4, 0), Vector3(1, 1, 1), 1.0f);
+        Vector3 surface_point(0, 0, 0);
         
-        Vector3 direction = directional_light.sample_direction(surface_point);
+        float pdf;
+        Vector3 direction = directional_light.sample_direction(surface_point, pdf);
         Vector3 expected_direction = Vector3(3, 4, 0).normalize();  // From (0,0,0) to (3,4,0)
         float expected_length = std::sqrt(3*3 + 4*4);  // Should be 5 (3-4-5 triangle)
         
@@ -438,18 +446,22 @@ namespace MathematicalTests {
         
         // Test Case 1: Light at surface point (zero distance)
         std::cout << "Test 1: Light coincident with surface point..." << std::endl;
-        PointLight coincident_light(Point3(0, 0, 0), Vector3(1, 1, 1), 1.0f);
-        Point3 same_point(0, 0, 0);
+        PointLight coincident_light(Vector3(0, 0, 0), Vector3(1, 1, 1), 1.0f);
+        Vector3 same_point(0, 0, 0);
         
-        Vector3 zero_irradiance = coincident_light.calculate_irradiance(same_point);
+        Vector3 light_dir;
+        float distance;
+        Vector3 zero_irradiance = coincident_light.illuminate(same_point, light_dir, distance);
         assert(std::abs(zero_irradiance.x) < 1e-6);  // Should be zero to prevent division by zero
         std::cout << "  Zero distance handled gracefully: PASS" << std::endl;
         std::cout << "  Educational note: Prevents division by zero in inverse square law" << std::endl;
         
         // Test Case 2: Very large distance (numerical stability)
         std::cout << "Test 2: Very large distance stability..." << std::endl;
-        Point3 far_point(1000, 0, 0);
-        Vector3 far_irradiance = coincident_light.calculate_irradiance(far_point);
+        Vector3 far_point(1000, 0, 0);
+        Vector3 far_light_dir;
+        float far_distance;
+        Vector3 far_irradiance = coincident_light.illuminate(far_point, far_light_dir, far_distance);
         
         assert(far_irradiance.x > 0 && far_irradiance.x < 1e-5);  // Should be very small but positive
         std::cout << "  Large distance produces small positive irradiance: PASS" << std::endl;
@@ -457,19 +469,21 @@ namespace MathematicalTests {
         
         // Test Case 3: Zero intensity light
         std::cout << "Test 3: Zero intensity light source..." << std::endl;
-        PointLight dark_light(Point3(1, 0, 0), Vector3(1, 1, 1), 0.0f);
-        Point3 test_point(0, 0, 0);
+        PointLight dark_light(Vector3(1, 0, 0), Vector3(1, 1, 1), 0.0f);
+        Vector3 test_point(0, 0, 0);
         
-        Vector3 dark_irradiance = dark_light.calculate_irradiance(test_point);
+        Vector3 dark_light_dir;
+        float dark_distance;
+        Vector3 dark_irradiance = dark_light.illuminate(test_point, dark_light_dir, dark_distance);
         assert(std::abs(dark_irradiance.x) < 1e-6);  // Should be zero
         std::cout << "  Zero intensity produces zero irradiance: PASS" << std::endl;
         std::cout << "  Educational note: I = 0 means no light emission" << std::endl;
         
         // Test Case 4: Invalid light validation
         std::cout << "Test 4: Invalid light configuration detection..." << std::endl;
-        PointLight invalid_light(Point3(0, 0, 0), Vector3(-1, 0, 0), 1.0f);  // Negative color
+        PointLight invalid_light(Vector3(0, 0, 0), Vector3(-1, 0, 0), 1.0f);  // Negative color
         
-        assert(!invalid_light.validate_light());
+        assert(!invalid_light.validate_parameters());
         std::cout << "  Invalid light configuration detected: PASS" << std::endl;
         std::cout << "  Educational note: Negative color values are unphysical" << std::endl;
         
@@ -1065,10 +1079,11 @@ namespace MathematicalTests {
         
         // Test Case 1: Light direction calculation
         std::cout << "  Testing light direction calculation..." << std::endl;
-        PointLight light(Point3(1, 0, 0), Vector3(1, 1, 1), 1.0f);
-        Point3 surface_point(0, 0, 0);
+        PointLight light(Vector3(1, 0, 0), Vector3(1, 1, 1), 1.0f);
+        Vector3 surface_point(0, 0, 0);
         
-        Vector3 direction = light.sample_direction(surface_point);
+        float pdf;
+        Vector3 direction = light.sample_direction(surface_point, pdf);
         Vector3 expected_dir(1, 0, 0);  // Normalized (1,0,0)
         
         assert(std::abs(direction.x - 1.0f) < 1e-6);
@@ -1078,7 +1093,9 @@ namespace MathematicalTests {
         
         // Test Case 2: Inverse square law
         std::cout << "  Testing inverse square law..." << std::endl;
-        Vector3 irradiance = light.calculate_irradiance(surface_point);
+        Vector3 irr_light_dir;
+        float irr_distance;
+        Vector3 irradiance = light.illuminate(surface_point, irr_light_dir, irr_distance);
         
         // Distance = 1, so falloff = 1/(4π*1²) = 1/(4π)
         float expected_falloff = 1.0f / (4.0f * M_PI);
@@ -1090,8 +1107,10 @@ namespace MathematicalTests {
         
         // Test Case 3: Distance scaling
         std::cout << "  Testing distance scaling..." << std::endl;
-        Point3 far_point(2, 0, 0);  // Distance = 2
-        Vector3 far_irradiance = light.calculate_irradiance(far_point);
+        Vector3 far_point(2, 0, 0);  // Distance = 2
+        Vector3 far_irr_light_dir;
+        float far_irr_distance;
+        Vector3 far_irradiance = light.illuminate(far_point, far_irr_light_dir, far_irr_distance);
         
         // Distance = 2, so falloff = 1/(4π*4) = 1/(16π)
         // Irradiance should be 1/4 of close irradiance
@@ -1101,10 +1120,10 @@ namespace MathematicalTests {
         
         // Test Case 4: Light validation
         std::cout << "  Testing light validation..." << std::endl;
-        assert(light.validate_light());  // Valid light
+        assert(light.validate_parameters());  // Valid light
         
-        PointLight invalid_light(Point3(0, 0, 0), Vector3(-1, 0, 0), 1.0f);  // Negative color
-        assert(!invalid_light.validate_light());  // Should be invalid
+        PointLight invalid_light(Vector3(0, 0, 0), Vector3(-1, 0, 0), 1.0f);  // Negative color
+        assert(!invalid_light.validate_parameters());  // Should be invalid
         
         std::cout << "  Point light mathematics: PASSED" << std::endl;
         return true;
@@ -1120,7 +1139,7 @@ namespace MathematicalTests {
         Ray camera_ray(Point3(0, 0, 0), Vector3(0, 0, -1));
         Sphere sphere(Point3(0, 0, -2), 0.5f, 0);  // Smaller sphere, closer
         LambertMaterial material(Vector3(0.5f, 0.5f, 0.5f));  // 50% gray
-        PointLight light(Point3(1, 1, -1), Vector3(1, 1, 1), 4.0f);  // Bright white light
+        PointLight light(Vector3(1, 1, -1), Vector3(1, 1, 1), 4.0f);  // Bright white light
         
         // Step 1: Ray-sphere intersection
         Sphere::Intersection intersection = sphere.intersect(camera_ray);
@@ -1130,8 +1149,11 @@ namespace MathematicalTests {
         assert(std::abs(intersection.t - expected_t) < 1e-5);
         
         // Step 2: Light evaluation
-        Vector3 light_direction = light.sample_direction(intersection.point);
-        Vector3 incident_irradiance = light.calculate_irradiance(intersection.point);
+        float pdf;
+        Vector3 light_direction = light.sample_direction(Vector3(intersection.point.x, intersection.point.y, intersection.point.z), pdf);
+        Vector3 inc_light_dir;
+        float inc_distance;
+        Vector3 incident_irradiance = light.illuminate(Vector3(intersection.point.x, intersection.point.y, intersection.point.z), inc_light_dir, inc_distance);
         
         // Verify light direction is normalized
         assert(std::abs(light_direction.length() - 1.0f) < 1e-6);
@@ -2265,6 +2287,234 @@ sphere 2.0 0.0 -5.0 1.0 legacy_green
         return true;
     }
 
+    // === STORY 3.2: ADVANCED LIGHTING SYSTEM TESTS ===
+
+    bool test_point_light_falloff_validation() {
+        std::cout << "\n=== Point Light Falloff Mathematical Validation ===" << std::endl;
+        
+        // Create point light at origin with unit intensity and white color
+        Vector3 light_position(0, 0, 0);
+        Vector3 light_color(1, 1, 1);
+        float light_intensity = 1.0f;
+        ::PointLight point_light(light_position, light_color, light_intensity);
+        
+        // Test inverse square law at known distances
+        std::cout << "Testing inverse square law falloff..." << std::endl;
+        
+        // Test at distance 1: attenuation = 1/(1²) = 1.0
+        Vector3 test_point1(1, 0, 0);
+        Vector3 light_direction1;
+        float distance1;
+        Vector3 contribution1 = point_light.illuminate(test_point1, light_direction1, distance1);
+        
+        std::cout << "  Distance 1 unit: attenuation = 1/(1²) = 1.0" << std::endl;
+        std::cout << "  Expected contribution: (1,1,1) * 1.0 * 1.0 = (1,1,1)" << std::endl;
+        std::cout << "  Actual contribution: (" << contribution1.x << ", " << contribution1.y << ", " << contribution1.z << ")" << std::endl;
+        
+        assert(std::abs(distance1 - 1.0f) < 1e-6f);
+        assert(std::abs(contribution1.x - 1.0f) < 1e-6f);
+        assert(std::abs(contribution1.y - 1.0f) < 1e-6f);
+        assert(std::abs(contribution1.z - 1.0f) < 1e-6f);
+        
+        // Test at distance 2: attenuation = 1/(2²) = 0.25
+        Vector3 test_point2(2, 0, 0);
+        Vector3 light_direction2;
+        float distance2;
+        Vector3 contribution2 = point_light.illuminate(test_point2, light_direction2, distance2);
+        
+        std::cout << "  Distance 2 units: attenuation = 1/(2²) = 0.25" << std::endl;
+        std::cout << "  Expected contribution: (1,1,1) * 1.0 * 0.25 = (0.25,0.25,0.25)" << std::endl;
+        std::cout << "  Actual contribution: (" << contribution2.x << ", " << contribution2.y << ", " << contribution2.z << ")" << std::endl;
+        
+        assert(std::abs(distance2 - 2.0f) < 1e-6f);
+        assert(std::abs(contribution2.x - 0.25f) < 1e-6f);
+        assert(std::abs(contribution2.y - 0.25f) < 1e-6f);
+        assert(std::abs(contribution2.z - 0.25f) < 1e-6f);
+        
+        // Test light direction is normalized
+        assert(std::abs(light_direction1.length() - 1.0f) < 1e-6f);
+        assert(std::abs(light_direction2.length() - 1.0f) < 1e-6f);
+        
+        std::cout << "  Point light falloff validation: PASSED" << std::endl;
+        return true;
+    }
+
+    bool test_directional_light_consistency() {
+        std::cout << "\n=== Directional Light Consistency Validation ===" << std::endl;
+        
+        // Create directional light pointing downward (-Y direction)
+        Vector3 light_direction(0, -1, 0);  // Pointing down
+        Vector3 light_color(1, 1, 1);
+        float light_intensity = 2.0f;
+        DirectionalLight dir_light(light_direction, light_color, light_intensity);
+        
+        // Test that intensity is constant regardless of distance
+        std::cout << "Testing constant intensity regardless of distance..." << std::endl;
+        
+        Vector3 test_point1(0, 10, 0);  // Far from origin
+        Vector3 test_point2(0, 100, 0); // Very far from origin
+        
+        Vector3 light_dir1, light_dir2;
+        float distance1, distance2;
+        
+        Vector3 contribution1 = dir_light.illuminate(test_point1, light_dir1, distance1);
+        Vector3 contribution2 = dir_light.illuminate(test_point2, light_dir2, distance2);
+        
+        std::cout << "  Point 1 (0,10,0) contribution: (" << contribution1.x << ", " << contribution1.y << ", " << contribution1.z << ")" << std::endl;
+        std::cout << "  Point 2 (0,100,0) contribution: (" << contribution2.x << ", " << contribution2.y << ", " << contribution2.z << ")" << std::endl;
+        
+        // Contributions should be identical for directional lights
+        assert(std::abs(contribution1.x - contribution2.x) < 1e-6f);
+        assert(std::abs(contribution1.y - contribution2.y) < 1e-6f);
+        assert(std::abs(contribution1.z - contribution2.z) < 1e-6f);
+        
+        // Both should equal color * intensity
+        Vector3 expected = light_color * light_intensity;
+        assert(std::abs(contribution1.x - expected.x) < 1e-6f);
+        assert(std::abs(contribution1.y - expected.y) < 1e-6f);
+        assert(std::abs(contribution1.z - expected.z) < 1e-6f);
+        
+        // Light directions should be identical and opposite to light direction
+        assert(std::abs(light_dir1.x - light_dir2.x) < 1e-6f);
+        assert(std::abs(light_dir1.y - light_dir2.y) < 1e-6f);
+        assert(std::abs(light_dir1.z - light_dir2.z) < 1e-6f);
+        
+        // Should point upward (opposite to downward light direction)
+        assert(std::abs(light_dir1.x - 0.0f) < 1e-6f);
+        assert(std::abs(light_dir1.y - 1.0f) < 1e-6f);
+        assert(std::abs(light_dir1.z - 0.0f) < 1e-6f);
+        
+        std::cout << "  Directional light consistency: PASSED" << std::endl;
+        return true;
+    }
+
+    bool test_light_type_polymorphism() {
+        std::cout << "\n=== Light Type Polymorphism Validation ===" << std::endl;
+        
+        // Create lights through base class pointers
+        std::vector<std::unique_ptr<Light>> lights;
+        
+        lights.push_back(std::make_unique<::PointLight>(Vector3(1, 0, 0), Vector3(1, 0.5f, 0.5f), 2.0f));
+        lights.push_back(std::make_unique<DirectionalLight>(Vector3(0, -1, 0), Vector3(0.5f, 1, 0.5f), 1.5f));
+        lights.push_back(std::make_unique<AreaLight>(Vector3(0, 0, -2), Vector3(0, 0, 1), 1.0f, 1.0f, Vector3(0.5f, 0.5f, 1), 1.0f));
+        
+        std::cout << "Created " << lights.size() << " lights through polymorphic interface" << std::endl;
+        
+        // Test that each light type works through base class interface
+        Vector3 test_point(0, 0, 0);
+        for (size_t i = 0; i < lights.size(); ++i) {
+            Vector3 light_direction;
+            float distance;
+            float pdf;
+            
+            // Test illuminate method
+            Vector3 contribution = lights[i]->illuminate(test_point, light_direction, distance);
+            
+            // Test sample_direction method
+            Vector3 sample_dir = lights[i]->sample_direction(test_point, pdf);
+            
+            // Test validation methods
+            bool is_valid = lights[i]->validate_parameters();
+            
+            // Test info method
+            std::string info = lights[i]->get_light_info();
+            
+            std::cout << "  Light " << i << ": " << info << std::endl;
+            std::cout << "    Contribution: (" << contribution.x << ", " << contribution.y << ", " << contribution.z << ")" << std::endl;
+            std::cout << "    Valid parameters: " << (is_valid ? "YES" : "NO") << std::endl;
+            
+            // All lights should have valid parameters
+            assert(is_valid);
+            
+            // Light direction should be normalized
+            assert(std::abs(light_direction.length() - 1.0f) < 1e-3f);  // Relaxed tolerance for area lights
+            
+            // PDF should be positive for valid samples
+            assert(pdf >= 0.0f);
+        }
+        
+        std::cout << "  Light polymorphism validation: PASSED" << std::endl;
+        return true;
+    }
+
+    bool test_light_parameter_validation() {
+        std::cout << "\n=== Light Parameter Validation Tests ===" << std::endl;
+        
+        // Test valid parameters
+        std::cout << "Testing valid parameter validation..." << std::endl;
+        ::PointLight valid_light(Vector3(0, 0, 0), Vector3(0.5f, 0.5f, 0.5f), 1.0f);
+        assert(valid_light.validate_parameters());
+        
+        // Test parameter clamping
+        std::cout << "Testing parameter clamping..." << std::endl;
+        ::PointLight clamp_test_light(Vector3(0, 0, 0), Vector3(2.0f, -0.5f, 1.5f), -1.0f);
+        
+        // Should be invalid before clamping
+        assert(!clamp_test_light.validate_parameters());
+        
+        // Clamp parameters
+        clamp_test_light.clamp_parameters();
+        
+        // Should be valid after clamping
+        assert(clamp_test_light.validate_parameters());
+        
+        // Verify color components are clamped to [0,1]
+        assert(clamp_test_light.color.x >= 0.0f && clamp_test_light.color.x <= 1.0f);
+        assert(clamp_test_light.color.y >= 0.0f && clamp_test_light.color.y <= 1.0f);
+        assert(clamp_test_light.color.z >= 0.0f && clamp_test_light.color.z <= 1.0f);
+        
+        // Verify intensity is positive
+        assert(clamp_test_light.intensity > 0.0f);
+        
+        std::cout << "  Original color: (2.0, -0.5, 1.5)" << std::endl;
+        std::cout << "  Clamped color: (" << clamp_test_light.color.x << ", " << clamp_test_light.color.y << ", " << clamp_test_light.color.z << ")" << std::endl;
+        std::cout << "  Original intensity: -1.0" << std::endl;
+        std::cout << "  Clamped intensity: " << clamp_test_light.intensity << std::endl;
+        
+        std::cout << "  Light parameter validation: PASSED" << std::endl;
+        return true;
+    }
+
+    bool test_scene_multi_light_management() {
+        std::cout << "\n=== Scene Multi-Light Management Tests ===" << std::endl;
+        
+        Scene test_scene;
+        
+        // Add multiple different light types
+        int point_light_idx = test_scene.add_light(std::make_unique<::PointLight>(Vector3(2, 0, 0), Vector3(1, 0, 0), 1.0f));
+        int dir_light_idx = test_scene.add_light(std::make_unique<DirectionalLight>(Vector3(0, -1, 0), Vector3(0, 1, 0), 1.0f));
+        int area_light_idx = test_scene.add_light(std::make_unique<AreaLight>(Vector3(0, 0, -1), Vector3(0, 0, 1), 1.0f, 1.0f, Vector3(0, 0, 1), 1.0f));
+        
+        // Verify lights were added successfully
+        assert(point_light_idx == 0);
+        assert(dir_light_idx == 1);
+        assert(area_light_idx == 2);
+        assert(test_scene.lights.size() == 3);
+        
+        std::cout << "Added " << test_scene.lights.size() << " lights to scene" << std::endl;
+        
+        // Verify light types
+        assert(test_scene.lights[0]->type == LightType::Point);
+        assert(test_scene.lights[1]->type == LightType::Directional);
+        assert(test_scene.lights[2]->type == LightType::Area);
+        
+        // Test that all lights can be accessed and used
+        Vector3 test_point(0, 0, 0);
+        for (size_t i = 0; i < test_scene.lights.size(); ++i) {
+            Vector3 light_dir;
+            float distance;
+            Vector3 contrib = test_scene.lights[i]->illuminate(test_point, light_dir, distance);
+            
+            std::cout << "  Light " << i << " contribution: (" << contrib.x << ", " << contrib.y << ", " << contrib.z << ")" << std::endl;
+            
+            // All contributions should be non-negative
+            assert(contrib.x >= 0.0f && contrib.y >= 0.0f && contrib.z >= 0.0f);
+        }
+        
+        std::cout << "  Scene multi-light management: PASSED" << std::endl;
+        return true;
+    }
+
 } // namespace MathematicalTests
 
 int main() {
@@ -2345,6 +2595,14 @@ int main() {
         all_passed &= MathematicalTests::test_polymorphic_brdf_evaluation();
         all_passed &= MathematicalTests::test_multi_material_scene_loading();
         all_passed &= MathematicalTests::test_scene_material_brdf_integration();
+        
+        // Story 3.2: Advanced Lighting and Multiple Lights Tests
+        std::cout << "\n=== STORY 3.2: ADVANCED LIGHTING SYSTEM TESTS ===" << std::endl;
+        all_passed &= MathematicalTests::test_point_light_falloff_validation();
+        all_passed &= MathematicalTests::test_directional_light_consistency();
+        all_passed &= MathematicalTests::test_light_type_polymorphism();
+        all_passed &= MathematicalTests::test_light_parameter_validation();
+        all_passed &= MathematicalTests::test_scene_multi_light_management();
         
         if (all_passed) {
             std::cout << "\n✅ ALL MATHEMATICAL TESTS PASSED" << std::endl;
