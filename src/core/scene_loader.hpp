@@ -3,11 +3,13 @@
 #include "sphere.hpp"
 #include "../materials/lambert.hpp"
 #include "../materials/cook_torrance.hpp"
+#include "../materials/material_base.hpp"
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <map>
 #include <iostream>
+#include <memory>
 
 // SceneLoader handles parsing of simple scene files for educational multi-primitive scenes
 // File format: Simple key-value pairs with educational transparency and error handling
@@ -63,10 +65,27 @@ public:
             line_stream >> command;
             
             if (command == "material") {
-                if (parse_material(line_stream, scene, material_name_to_index, material_type)) {
+                // Legacy Lambert material format for backward compatibility
+                if (parse_lambert_material_legacy(line_stream, scene, material_name_to_index)) {
                     materials_loaded++;
                 } else {
-                    std::cout << "WARNING: Failed to parse material on line " << line_number << std::endl;
+                    std::cout << "WARNING: Failed to parse legacy material on line " << line_number << std::endl;
+                }
+            }
+            else if (command == "material_lambert") {
+                // Explicit Lambert material format  
+                if (parse_lambert_material(line_stream, scene, material_name_to_index)) {
+                    materials_loaded++;
+                } else {
+                    std::cout << "WARNING: Failed to parse Lambert material on line " << line_number << std::endl;
+                }
+            }
+            else if (command == "material_cook_torrance") {
+                // Cook-Torrance material format
+                if (parse_cook_torrance_material(line_stream, scene, material_name_to_index)) {
+                    materials_loaded++;
+                } else {
+                    std::cout << "WARNING: Failed to parse Cook-Torrance material on line " << line_number << std::endl;
                 }
             }
             else if (command == "sphere") {
@@ -95,40 +114,131 @@ public:
     }
     
 private:
-    // Parse material definition with error handling and validation
+    // Parse legacy Lambert material for backward compatibility
     // Format: material name red green blue
-    static bool parse_material(std::istringstream& stream, Scene& scene, 
-                              std::map<std::string, int>& material_map, 
-                              const std::string& material_type = "lambert") {
+    static bool parse_lambert_material_legacy(std::istringstream& stream, Scene& scene, 
+                                             std::map<std::string, int>& material_map) {
         std::string name;
         float r, g, b;
         
         if (!(stream >> name >> r >> g >> b)) {
-            std::cout << "ERROR: Invalid material format. Expected: material name r g b" << std::endl;
+            std::cout << "ERROR: Invalid legacy material format. Expected: material name r g b" << std::endl;
             return false;
         }
         
-        std::cout << "Parsing material: " << name << " (" << r << ", " << g << ", " << b << ")" << std::endl;
+        std::cout << "Parsing legacy Lambert material: " << name << " (" << r << ", " << g << ", " << b << ")" << std::endl;
         
-        // Validate color values
-        if (r < 0.0f || r > 1.0f || g < 0.0f || g > 1.0f || b < 0.0f || b > 1.0f) {
-            std::cout << "WARNING: Color values outside [0,1] range, clamping" << std::endl;
-            r = std::max(0.0f, std::min(1.0f, r));
-            g = std::max(0.0f, std::min(1.0f, g));
-            b = std::max(0.0f, std::min(1.0f, b));
+        // Create Lambert material with validation
+        auto material = std::make_unique<LambertMaterial>(Vector3(r, g, b));
+        
+        // Validate parameters and show educational output
+        if (!material->validate_parameters()) {
+            std::cout << "WARNING: Material parameters outside valid range, clamping" << std::endl;
+            material->clamp_to_valid_ranges();
+            std::cout << "Clamped color: (" << material->base_color.x << ", " 
+                      << material->base_color.y << ", " << material->base_color.z << ")" << std::endl;
         }
         
-        // Create material and add to scene
-        if (material_type == "cook-torrance") {
-            std::cout << "WARNING: Cook-Torrance materials not fully supported in scene files yet." << std::endl;
-            std::cout << "Creating Lambert material as fallback. Use --no-scene for Cook-Torrance testing." << std::endl;
-            std::cout << "Cook-Torrance would use: base_color=(" << r << "," << g << "," << b << "), roughness=0.3, metallic=0.0, specular=0.04" << std::endl;
-        }
-        LambertMaterial material(Vector3(r, g, b));
-        int material_index = scene.add_material(material);
+        int material_index = scene.add_material(std::move(material));
         material_map[name] = material_index;
         
-        std::cout << "Material '" << name << "' registered at index " << material_index << std::endl;
+        std::cout << "Legacy Lambert material '" << name << "' registered at index " << material_index << std::endl;
+        return true;
+    }
+    
+    // Parse explicit Lambert material 
+    // Format: material_lambert name red green blue
+    static bool parse_lambert_material(std::istringstream& stream, Scene& scene, 
+                                      std::map<std::string, int>& material_map) {
+        std::string name;
+        float r, g, b;
+        
+        if (!(stream >> name >> r >> g >> b)) {
+            std::cout << "ERROR: Invalid Lambert material format. Expected: material_lambert name r g b" << std::endl;
+            std::cout << "Example: material_lambert matte_red 0.8 0.3 0.3" << std::endl;
+            return false;
+        }
+        
+        std::cout << "Parsing Lambert material: " << name << " (" << r << ", " << g << ", " << b << ")" << std::endl;
+        
+        // Create Lambert material with validation
+        auto material = std::make_unique<LambertMaterial>(Vector3(r, g, b));
+        
+        // Educational parameter validation
+        if (!material->validate_parameters()) {
+            std::cout << "WARNING: Lambert material parameters outside [0,1] range" << std::endl;
+            std::cout << "Educational note: Albedo > 1.0 would violate energy conservation (amplify light)" << std::endl;
+            material->clamp_to_valid_ranges();
+            std::cout << "Clamped albedo: (" << material->base_color.x << ", " 
+                      << material->base_color.y << ", " << material->base_color.z << ")" << std::endl;
+        }
+        
+        int material_index = scene.add_material(std::move(material));
+        material_map[name] = material_index;
+        
+        std::cout << "Lambert material '" << name << "' registered at index " << material_index 
+                  << " (Type: Lambert (Diffuse))" << std::endl;
+        return true;
+    }
+    
+    // Parse Cook-Torrance material
+    // Format: material_cook_torrance name base_r base_g base_b roughness metallic specular  
+    static bool parse_cook_torrance_material(std::istringstream& stream, Scene& scene,
+                                            std::map<std::string, int>& material_map) {
+        std::string name;
+        float r, g, b, roughness, metallic, specular;
+        
+        if (!(stream >> name >> r >> g >> b >> roughness >> metallic >> specular)) {
+            std::cout << "ERROR: Invalid Cook-Torrance material format" << std::endl;
+            std::cout << "Expected: material_cook_torrance name r g b roughness metallic specular" << std::endl;
+            std::cout << "Example: material_cook_torrance gold 1.0 0.8 0.3 0.1 1.0 0.04" << std::endl;
+            std::cout << "Parameters:" << std::endl;
+            std::cout << "  roughness: [0.01, 1.0] (0.01=mirror, 1.0=diffuse)" << std::endl;
+            std::cout << "  metallic: [0.0, 1.0] (0.0=dielectric, 1.0=conductor)" << std::endl;
+            std::cout << "  specular: [0.0, 1.0] (typical dielectric F0: 0.04)" << std::endl;
+            return false;
+        }
+        
+        std::cout << "Parsing Cook-Torrance material: " << name << std::endl;
+        std::cout << "  Base color: (" << r << ", " << g << ", " << b << ")" << std::endl;
+        std::cout << "  Roughness: " << roughness << ", Metallic: " << metallic << ", Specular: " << specular << std::endl;
+        
+        // Create Cook-Torrance material with validation
+        auto material = std::make_unique<CookTorranceMaterial>(Vector3(r, g, b), roughness, metallic, specular, true);
+        
+        // Educational parameter validation with detailed output
+        if (!material->validate_parameters()) {
+            std::cout << "WARNING: Cook-Torrance material parameters outside valid ranges" << std::endl;
+            std::cout << "Educational notes:" << std::endl;
+            std::cout << "  - Roughness < 0.01 causes numerical instability in GGX distribution" << std::endl;
+            std::cout << "  - Roughness > 1.0 represents unphysical surface behavior" << std::endl;
+            std::cout << "  - Metallic outside [0,1] breaks PBR material model assumptions" << std::endl;
+            std::cout << "  - Color values > 1.0 would violate energy conservation" << std::endl;
+            material->clamp_to_valid_ranges();
+            std::cout << "Parameters clamped to valid ranges for physical accuracy" << std::endl;
+        }
+        
+        // Educational material analysis
+        std::cout << "Material analysis:" << std::endl;
+        if (material->metallic > 0.5f) {
+            std::cout << "  Type: Conductor (Metal) - high reflectance with colored F0" << std::endl;
+        } else {
+            std::cout << "  Type: Dielectric (Non-metal) - low F0, transmissive at normal incidence" << std::endl;
+        }
+        
+        if (material->roughness < 0.2f) {
+            std::cout << "  Surface: Glossy/Mirror-like - sharp, concentrated reflections" << std::endl;
+        } else if (material->roughness > 0.7f) {
+            std::cout << "  Surface: Rough/Diffuse-like - broad, scattered reflections" << std::endl;
+        } else {
+            std::cout << "  Surface: Semi-glossy - moderate reflection spreading" << std::endl;
+        }
+        
+        int material_index = scene.add_material(std::move(material));
+        material_map[name] = material_index;
+        
+        std::cout << "Cook-Torrance material '" << name << "' registered at index " << material_index 
+                  << " (Type: Microfacet BRDF)" << std::endl;
         return true;
     }
     

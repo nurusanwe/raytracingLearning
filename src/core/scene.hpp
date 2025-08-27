@@ -4,11 +4,14 @@
 #include "ray.hpp"
 #include "sphere.hpp"
 #include "../materials/lambert.hpp"
+#include "../materials/cook_torrance.hpp"
+#include "../materials/material_base.hpp"
 #include <vector>
 #include <memory>
 #include <iostream>
 #include <chrono>
 #include <limits>
+#include <algorithm>
 
 // Scene class manages multiple primitive objects and materials for ray tracing
 // Educational focus: demonstrates ray-scene intersection algorithms and performance monitoring
@@ -18,8 +21,9 @@ public:
     // Container for geometric primitives in the scene
     std::vector<Sphere> primitives;
     
-    // Container for materials with index-based referencing from primitives
-    std::vector<LambertMaterial> materials;
+    // Container for polymorphic materials with index-based referencing from primitives  
+    // Supports both Lambert and Cook-Torrance materials through Material base class polymorphism
+    std::vector<std::unique_ptr<Material>> materials;
     
     // Educational performance monitoring for intersection statistics
     mutable int total_intersection_tests = 0;
@@ -36,7 +40,7 @@ public:
         float t;                           // Ray parameter at closest intersection
         Point3 point;                      // 3D coordinates of intersection point
         Vector3 normal;                    // Outward-pointing surface normal
-        const LambertMaterial* material;   // Material properties at intersection
+        const Material* material;          // Polymorphic material properties at intersection
         const Sphere* primitive;           // Primitive object that was hit
         
         // Default constructor for no-intersection case
@@ -46,7 +50,7 @@ public:
               
         // Constructor for valid intersection with complete information
         Intersection(float t_value, const Point3& hit_point, const Vector3& surface_normal,
-                    const LambertMaterial* hit_material, const Sphere* hit_primitive)
+                    const Material* hit_material, const Sphere* hit_primitive)
             : hit(true), t(t_value), point(hit_point), normal(surface_normal),
               material(hit_material), primitive(hit_primitive) {}
     };
@@ -109,7 +113,7 @@ public:
                         closest_hit.t = sphere_hit.t;
                         closest_hit.point = sphere_hit.point;
                         closest_hit.normal = sphere_hit.normal;
-                        closest_hit.material = &materials[sphere.material_index];
+                        closest_hit.material = materials[sphere.material_index].get();
                         closest_hit.primitive = &sphere;
                         
                         if (verbose) {
@@ -180,25 +184,55 @@ public:
         return closest_hit;
     }
 
-    // Add material to scene and return its index for primitive referencing
+    // Add polymorphic material to scene and return its index for primitive referencing
     // Educational transparency: reports material assignment and validates parameters
-    int add_material(const LambertMaterial& material) {
-        std::cout << "\n=== Adding Material to Scene ===" << std::endl;
+    // Supports both Lambert and Cook-Torrance materials through Material base class polymorphism
+    int add_material(std::unique_ptr<Material> material) {
+        std::cout << "\n=== Adding Polymorphic Material to Scene ===" << std::endl;
         
-        // Validate material energy conservation before adding
-        if (!material.validate_energy_conservation()) {
-            std::cout << "WARNING: Material violates energy conservation, but adding anyway for educational purposes" << std::endl;
+        if (!material) {
+            std::cout << "ERROR: Null material pointer" << std::endl;
+            return -1;
         }
         
-        materials.push_back(material);
+        // Validate material parameters before adding
+        if (!material->validate_parameters()) {
+            std::cout << "WARNING: Material parameters outside valid ranges" << std::endl;
+            std::cout << "Educational note: Invalid parameters may cause non-physical behavior" << std::endl;
+            material->clamp_to_valid_ranges();
+            std::cout << "Parameters automatically clamped to valid ranges" << std::endl;
+        }
+        
+        // Educational material type reporting
+        std::cout << "Material Type: " << material->material_type_name() << std::endl;
+        std::cout << "Base Color: (" << material->base_color.x << ", " 
+                 << material->base_color.y << ", " << material->base_color.z << ")" << std::endl;
+        
+        // Additional details for specific material types
+        if (material->type == MaterialType::CookTorrance) {
+            // Safe cast for Cook-Torrance specific information
+            CookTorranceMaterial* ct_material = static_cast<CookTorranceMaterial*>(material.get());
+            std::cout << "Cook-Torrance Parameters:" << std::endl;
+            std::cout << "  Roughness: " << ct_material->roughness << std::endl;
+            std::cout << "  Metallic: " << ct_material->metallic << std::endl;
+            std::cout << "  Specular: " << ct_material->specular << std::endl;
+        }
+        
+        materials.push_back(std::move(material));
         int material_index = static_cast<int>(materials.size() - 1);
         
         std::cout << "Material added at index: " << material_index << std::endl;
-        std::cout << "Material albedo: (" << material.base_color.x << ", " 
-                 << material.base_color.y << ", " << material.base_color.z << ")" << std::endl;
         std::cout << "Total materials in scene: " << materials.size() << std::endl;
+        std::cout << "=== Material addition complete ===" << std::endl;
         
         return material_index;
+    }
+
+    // Legacy add_material method for backward compatibility with existing Lambert code
+    // Wraps Lambert material in unique_ptr and delegates to polymorphic method
+    int add_material(const LambertMaterial& material) {
+        auto lambert_material = std::make_unique<LambertMaterial>(material);
+        return add_material(std::move(lambert_material));
     }
 
     // Add sphere primitive to scene and return its index
@@ -281,9 +315,18 @@ public:
         if (materials.size() > 0) {
             std::cout << "\nMaterial Details:" << std::endl;
             for (size_t i = 0; i < materials.size(); ++i) {
-                const LambertMaterial& material = materials[i];
-                std::cout << "  Material " << i << ": albedo(" << material.base_color.x << "," 
-                         << material.base_color.y << "," << material.base_color.z << ")" << std::endl;
+                const Material* material = materials[i].get();
+                std::cout << "  Material " << i << ": " << material->material_type_name() 
+                         << " - base_color(" << material->base_color.x << "," 
+                         << material->base_color.y << "," << material->base_color.z << ")" << std::endl;
+                
+                // Additional details for Cook-Torrance materials
+                if (material->type == MaterialType::CookTorrance) {
+                    const CookTorranceMaterial* ct_material = static_cast<const CookTorranceMaterial*>(material);
+                    std::cout << "    Roughness: " << ct_material->roughness 
+                             << ", Metallic: " << ct_material->metallic 
+                             << ", Specular: " << ct_material->specular << std::endl;
+                }
             }
         }
         
@@ -307,12 +350,24 @@ public:
         // Memory used by sphere primitives
         total_bytes += primitives.size() * sizeof(Sphere);
         
-        // Memory used by materials
-        total_bytes += materials.size() * sizeof(LambertMaterial);
+        // Memory used by polymorphic materials
+        for (const auto& material : materials) {
+            if (material->type == MaterialType::Lambert) {
+                total_bytes += sizeof(LambertMaterial);
+            } else if (material->type == MaterialType::CookTorrance) {
+                total_bytes += sizeof(CookTorranceMaterial);
+            } else {
+                // Default to base Material size for unknown types
+                total_bytes += sizeof(Material);
+            }
+        }
         
-        // Memory used by containers (approximate)
-        total_bytes += primitives.capacity() * sizeof(Sphere) - primitives.size() * sizeof(Sphere);
-        total_bytes += materials.capacity() * sizeof(LambertMaterial) - materials.size() * sizeof(LambertMaterial);
+        // Memory used by unique_ptr containers
+        total_bytes += materials.size() * sizeof(std::unique_ptr<Material>);
+        
+        // Memory used by containers (approximate overhead)
+        total_bytes += (primitives.capacity() - primitives.size()) * sizeof(Sphere);
+        total_bytes += (materials.capacity() - materials.size()) * sizeof(std::unique_ptr<Material>);
         
         return total_bytes;
     }
@@ -322,16 +377,37 @@ public:
         std::cout << "\n=== Scene Memory Usage Analysis ===" << std::endl;
         
         size_t sphere_memory = primitives.size() * sizeof(Sphere);
-        size_t material_memory = materials.size() * sizeof(LambertMaterial);
+        
+        // Calculate polymorphic material memory
+        size_t material_memory = 0;
+        size_t lambert_count = 0;
+        size_t cook_torrance_count = 0;
+        for (const auto& material : materials) {
+            if (material->type == MaterialType::Lambert) {
+                material_memory += sizeof(LambertMaterial);
+                lambert_count++;
+            } else if (material->type == MaterialType::CookTorrance) {
+                material_memory += sizeof(CookTorranceMaterial);
+                cook_torrance_count++;
+            } else {
+                material_memory += sizeof(Material);
+            }
+        }
+        
         size_t container_overhead = (primitives.capacity() - primitives.size()) * sizeof(Sphere) +
-                                   (materials.capacity() - materials.size()) * sizeof(LambertMaterial);
+                                   (materials.capacity() - materials.size()) * sizeof(std::unique_ptr<Material>);
         size_t total_scene_memory = calculate_scene_memory_usage();
         
         std::cout << "Scene Data Memory Breakdown:" << std::endl;
         std::cout << "  Spheres: " << primitives.size() << " × " << sizeof(Sphere) 
                   << " bytes = " << sphere_memory << " bytes" << std::endl;
-        std::cout << "  Materials: " << materials.size() << " × " << sizeof(LambertMaterial) 
-                  << " bytes = " << material_memory << " bytes" << std::endl;
+        std::cout << "  Materials: " << materials.size() << " total (" 
+                  << lambert_count << " Lambert, " << cook_torrance_count << " Cook-Torrance)" << std::endl;
+        std::cout << "    Lambert: " << lambert_count << " × " << sizeof(LambertMaterial) 
+                  << " bytes = " << (lambert_count * sizeof(LambertMaterial)) << " bytes" << std::endl;
+        std::cout << "    Cook-Torrance: " << cook_torrance_count << " × " << sizeof(CookTorranceMaterial) 
+                  << " bytes = " << (cook_torrance_count * sizeof(CookTorranceMaterial)) << " bytes" << std::endl;
+        std::cout << "    Material memory total: " << material_memory << " bytes" << std::endl;
         std::cout << "  Container overhead: " << container_overhead << " bytes" << std::endl;
         std::cout << "  Total scene memory: " << total_scene_memory << " bytes ("
                   << (total_scene_memory / 1024.0f) << " KB)" << std::endl;

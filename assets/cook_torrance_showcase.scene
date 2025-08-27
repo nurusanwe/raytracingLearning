@@ -1,0 +1,123 @@
+# Cook-Torrance Material Showcase Scene
+# Educational demonstration of microfacet theory with multiple material configurations
+# Demonstrates roughness, metallic, and specular parameter effects
+
+scene_name: Cook-Torrance Material Showcase
+description: Comprehensive demonstration of Cook-Torrance microfacet BRDF
+
+# ================================================
+# LAMBERT MATERIALS FOR COMPARISON
+# ================================================
+# These provide educational reference points to contrast with Cook-Torrance behavior
+# Lambert materials exhibit perfectly diffuse reflection (viewing angle independent)
+
+material_lambert matte_white 0.9 0.9 0.9
+material_lambert matte_red 0.8 0.3 0.3
+material_lambert matte_blue 0.3 0.3 0.8
+
+# ================================================
+# COOK-TORRANCE MATERIALS: METALLIC PROGRESSION
+# ================================================
+# These demonstrate roughness effects in metallic (conductor) materials
+# All have metallic=1.0, varying roughness from mirror-like to diffuse
+
+# Gold materials with roughness progression (metallic conductors)
+material_cook_torrance gold_mirror 1.0 0.8 0.3 0.02 1.0 0.04
+material_cook_torrance gold_brushed 1.0 0.8 0.3 0.3 1.0 0.04  
+material_cook_torrance gold_rough 1.0 0.8 0.3 0.8 1.0 0.04
+
+# Silver materials with roughness progression (metallic conductors)
+material_cook_torrance silver_mirror 0.95 0.95 0.95 0.02 1.0 0.04
+material_cook_torrance silver_brushed 0.95 0.95 0.95 0.3 1.0 0.04
+material_cook_torrance silver_rough 0.95 0.95 0.95 0.8 1.0 0.04
+
+# ================================================
+# COOK-TORRANCE MATERIALS: DIELECTRIC MATERIALS
+# ================================================
+# These demonstrate Cook-Torrance behavior in non-metallic materials
+# All have metallic=0.0, representing plastics, ceramics, etc.
+
+# Green plastic with roughness progression (dielectric materials)
+material_cook_torrance plastic_green_smooth 0.2 0.8 0.4 0.1 0.0 0.04
+material_cook_torrance plastic_green_semi 0.2 0.8 0.4 0.5 0.0 0.04
+material_cook_torrance plastic_green_rough 0.2 0.8 0.4 0.9 0.0 0.04
+
+# Red plastic with different specular values (F0 demonstration)
+material_cook_torrance plastic_red_normal 0.8 0.2 0.2 0.3 0.0 0.04
+material_cook_torrance plastic_red_glossy 0.8 0.2 0.2 0.1 0.0 0.08
+
+# ================================================
+# SCENE LAYOUT: EDUCATIONAL GRID ARRANGEMENT
+# ================================================
+# Grid layout enables side-by-side visual comparison of material theory
+# Each row demonstrates specific material concepts
+
+# TOP ROW: Gold metallic progression (smooth → rough)
+# Educational focus: How roughness affects specular highlights in metals
+sphere -3.0 2.0 -6.0 0.7 gold_mirror       # Roughness: 0.02 (mirror-like)
+sphere -1.0 2.0 -6.0 0.7 gold_brushed      # Roughness: 0.3  (brushed metal)
+sphere 1.0 2.0 -6.0 0.7 gold_rough         # Roughness: 0.8  (rough metal)
+sphere 3.0 2.0 -6.0 0.7 matte_red         # Lambert reference
+
+# SECOND ROW: Silver metallic progression (smooth → rough)
+# Educational focus: How different metals exhibit similar microfacet behavior
+sphere -3.0 0.5 -6.0 0.7 silver_mirror     # Roughness: 0.02 (mirror-like)
+sphere -1.0 0.5 -6.0 0.7 silver_brushed    # Roughness: 0.3  (brushed metal)
+sphere 1.0 0.5 -6.0 0.7 silver_rough       # Roughness: 0.8  (rough metal)
+sphere 3.0 0.5 -6.0 0.7 matte_white       # Lambert reference
+
+# THIRD ROW: Dielectric plastics progression (smooth → rough)
+# Educational focus: How dielectrics differ from metals in BRDF behavior
+sphere -3.0 -1.0 -6.0 0.7 plastic_green_smooth   # Roughness: 0.1 (glossy plastic)
+sphere -1.0 -1.0 -6.0 0.7 plastic_green_semi     # Roughness: 0.5 (semi-matte)
+sphere 1.0 -1.0 -6.0 0.7 plastic_green_rough     # Roughness: 0.9 (matte plastic)
+sphere 3.0 -1.0 -6.0 0.7 matte_blue              # Lambert reference
+
+# BOTTOM ROW: Specular parameter comparison (F0 effects)
+# Educational focus: How F0 affects dielectric reflection strength
+sphere -2.0 -2.5 -6.0 0.7 plastic_red_normal     # Standard F0: 0.04
+sphere 0.0 -2.5 -6.0 0.7 plastic_red_glossy      # Higher F0: 0.08
+sphere 2.0 -2.5 -6.0 0.7 matte_white            # Lambert reference
+
+# ================================================
+# EDUCATIONAL NOTES AND LEARNING OBJECTIVES
+# ================================================
+# This scene demonstrates the following Cook-Torrance microfacet theory concepts:
+#
+# 1. ROUGHNESS EFFECTS:
+#    - Low roughness (0.02): Sharp, mirror-like reflections (concentrated highlights)
+#    - Medium roughness (0.3-0.5): Semi-glossy surfaces (moderate highlight spread)  
+#    - High roughness (0.8-0.9): Diffuse-like behavior (broad highlight spread)
+#
+# 2. METALLIC vs DIELECTRIC BEHAVIOR:
+#    - Metallic=1.0 (conductors): High reflectance, colored F0 from base_color
+#    - Metallic=0.0 (dielectrics): Low F0 reflectance, transmissive behavior
+#    - F0 determines reflection strength at normal viewing angles
+#
+# 3. FRESNEL EFFECT DEMONSTRATION:
+#    - All materials show increased reflection at grazing angles
+#    - Metals maintain colored reflection across angles
+#    - Dielectrics transition from transmissive to reflective
+#
+# 4. ENERGY CONSERVATION:
+#    - All parameters clamped to physically valid ranges
+#    - No light amplification (energy conservation maintained)
+#    - Realistic material behavior across parameter space
+#
+# 5. COMPARISON WITH LAMBERT MODEL:
+#    - Lambert: Constant BRDF, viewing angle independent
+#    - Cook-Torrance: Variable BRDF with viewing angle dependency
+#    - Educational contrast between empirical and physically-based models
+#
+# RECOMMENDED LEARNING EXERCISES:
+# - Render scene with different viewing angles to observe Fresnel effects
+# - Compare specular highlights between different roughness values
+# - Observe how metallic materials differ from dielectric materials
+# - Validate energy conservation by checking that no materials amplify light
+# - Test parameter boundaries (roughness limits, metallic interpolation)
+#
+# TECHNICAL IMPLEMENTATION NOTES:
+# - All materials use physically plausible parameter ranges
+# - Roughness limited to [0.01, 1.0] to prevent numerical instability
+# - F0 values appropriate for material types (0.04 typical for dielectrics)
+# - Scene layout optimized for educational comparison and visual learning

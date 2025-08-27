@@ -1,5 +1,6 @@
 #pragma once
 #include "../core/vector3.hpp"
+#include "material_base.hpp"
 #include <cmath>
 #include <iostream>
 #include <iomanip>
@@ -274,9 +275,8 @@ namespace CookTorrance {
     };
 }
 
-class CookTorranceMaterial {
+class CookTorranceMaterial : public Material {
 public:
-    Vector3 base_color;     // Surface albedo color (dielectric) or reflectance values (conductor)
     float roughness;        // Surface roughness: 0.0 = perfect mirror, 1.0 = completely rough
     float metallic;         // Metallic parameter: 0.0 = dielectric, 1.0 = conductor 
     float specular;         // Specular reflectance for dielectric materials (typical default: 0.04)
@@ -290,7 +290,7 @@ public:
                         float metallic_param = 0.0f,
                         float specular_param = 0.04f,
                         bool verbose = false) 
-        : base_color(color), roughness(surface_roughness), metallic(metallic_param), specular(specular_param) {
+        : Material(color, MaterialType::CookTorrance), roughness(surface_roughness), metallic(metallic_param), specular(specular_param) {
         
         // Automatically clamp parameters to physically valid ranges
         clamp_cook_torrance_to_valid_ranges();
@@ -311,7 +311,7 @@ public:
     //   wi: incident light direction (pointing toward surface, normalized)
     //   wo: outgoing view direction (pointing toward camera, normalized)
     //   normal: surface normal at intersection point (outward-pointing, normalized)
-    Vector3 evaluate_brdf(const Vector3& wi, const Vector3& wo, const Vector3& normal, bool verbose = true) const {
+    Vector3 evaluate_brdf(const Vector3& wi, const Vector3& wo, const Vector3& normal, bool verbose = true) const override {
         if (verbose) {
             std::cout << "\n=== Cook-Torrance BRDF Evaluation ===" << std::endl;
             std::cout << "Incident direction (wi): (" << wi.x << ", " << wi.y << ", " << wi.z << ")" << std::endl;
@@ -449,7 +449,7 @@ public:
     // normal: surface normal at intersection point (outward-pointing, normalized)
     // incident_radiance: incoming light energy (L_i in rendering equation)
     Vector3 scatter_light(const Vector3& light_direction, const Vector3& view_direction, 
-                         const Vector3& normal, const Vector3& incident_radiance, bool verbose = true) const {
+                         const Vector3& normal, const Vector3& incident_radiance, bool verbose = true) const override {
         if (verbose) {
             std::cout << "\n=== Cook-Torrance Light Scattering Calculation ===" << std::endl;
             std::cout << "Light direction: (" << light_direction.x << ", " << light_direction.y << ", " << light_direction.z << ")" << std::endl;
@@ -487,6 +487,12 @@ public:
         }
 
         return outgoing_radiance;
+    }
+
+    // Cook-Torrance-specific educational BRDF explanation override
+    // Provides comprehensive mathematical breakdown of microfacet theory
+    void explain_brdf_evaluation(const Vector3& wi, const Vector3& wo, const Vector3& normal) const override {
+        explain_cook_torrance_evaluation(wi, wo, normal);
     }
 
     // Complete educational explanation of Cook-Torrance evaluation
@@ -601,8 +607,34 @@ public:
         std::cout << "=== COMPONENT BREAKDOWN COMPLETE ===" << std::endl;
     }
 
-    // Parameter validation for Cook-Torrance physically-based constraints
-    // Ensures all material parameters remain within physically plausible ranges
+    // Cook-Torrance-specific parameter validation implementation
+    // Validates roughness, metallic, specular, and base color within physically valid ranges
+    bool validate_parameters() const override {
+        bool roughness_valid = (roughness >= 0.01f && roughness <= 1.0f);
+        bool metallic_valid = (metallic >= 0.0f && metallic <= 1.0f);
+        bool specular_valid = (specular >= 0.0f && specular <= 1.0f);
+        bool color_valid = (base_color.x >= 0.0f && base_color.x <= 1.0f &&
+                           base_color.y >= 0.0f && base_color.y <= 1.0f &&
+                           base_color.z >= 0.0f && base_color.z <= 1.0f);
+        
+        return roughness_valid && metallic_valid && specular_valid && color_valid;
+    }
+
+    // Cook-Torrance-specific parameter clamping implementation  
+    // Automatically clamps all parameters to physically valid ranges
+    void clamp_to_valid_ranges() override {
+        roughness = std::max(0.01f, std::min(1.0f, roughness));  // Prevent perfect mirror (numerical issues)
+        metallic = std::max(0.0f, std::min(1.0f, metallic));     // Binary or interpolated metallic workflow
+        specular = std::max(0.0f, std::min(1.0f, specular));     // Physical reflectance bounds
+        
+        // Clamp color channels individually to [0,1] range
+        base_color.x = std::max(0.0f, std::min(1.0f, base_color.x));
+        base_color.y = std::max(0.0f, std::min(1.0f, base_color.y));
+        base_color.z = std::max(0.0f, std::min(1.0f, base_color.z));
+    }
+
+    // Parameter validation for Cook-Torrance physically-based constraints (educational output)
+    // Ensures all material parameters remain within physically plausible ranges with detailed reporting
     bool validate_cook_torrance_parameters() const {
         std::cout << "\n=== Cook-Torrance Parameter Validation ===" << std::endl;
         
@@ -624,17 +656,11 @@ public:
         return all_valid;
     }
 
-    // Automatic parameter clamping to ensure physically valid ranges
-    // Prevents numerical instability and non-physical behavior
+    // Automatic parameter clamping to ensure physically valid ranges (educational output)
+    // Prevents numerical instability and non-physical behavior with detailed console output
     void clamp_cook_torrance_to_valid_ranges() {
-        roughness = std::max(0.01f, std::min(1.0f, roughness));  // Prevent perfect mirror (numerical issues)
-        metallic = std::max(0.0f, std::min(1.0f, metallic));     // Binary or interpolated metallic workflow
-        specular = std::max(0.0f, std::min(1.0f, specular));     // Physical reflectance bounds
-        
-        // Clamp color channels individually to [0,1] range
-        base_color.x = std::max(0.0f, std::min(1.0f, base_color.x));
-        base_color.y = std::max(0.0f, std::min(1.0f, base_color.y));
-        base_color.z = std::max(0.0f, std::min(1.0f, base_color.z));
+        // Use the virtual clamp_to_valid_ranges method which provides the core functionality
+        clamp_to_valid_ranges();
     }
 
 private:
