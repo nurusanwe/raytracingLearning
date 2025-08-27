@@ -2,17 +2,18 @@
 #include <cassert>
 #include <cmath>
 #include <vector>
-#include "src/core/vector3.hpp"
-#include "src/core/point3.hpp"
-#include "src/core/ray.hpp"
-#include "src/core/sphere.hpp"
-#include "src/core/scene.hpp"
-#include "src/core/scene_loader.hpp"
-#include "src/core/point_light.hpp"
-#include "src/core/camera.hpp"
-#include "src/core/image.hpp"
-#include "src/materials/lambert.hpp"
-#include "src/materials/cook_torrance.hpp"
+#include "../src/core/vector3.hpp"
+#include "../src/core/point3.hpp"
+#include "../src/core/ray.hpp"
+#include "../src/core/sphere.hpp"
+#include "../src/core/scene.hpp"
+#include "../src/core/scene_loader.hpp"
+#include "../src/core/point_light.hpp"
+#include "../src/core/camera.hpp"
+#include "../src/core/image.hpp"
+#include "../src/materials/lambert.hpp"
+#include "../src/materials/cook_torrance.hpp"
+#include "../src/materials/material_base.hpp"
 
 namespace MathematicalTests {
 
@@ -412,7 +413,8 @@ namespace MathematicalTests {
         
         // Test Case 4: Invalid albedo values (> 1.0) for energy conservation test
         std::cout << "Test 4: Energy conservation violation detection..." << std::endl;
-        LambertMaterial invalid_material(Vector3(1.5f, 0.8f, 0.6f));  // Red > 1.0
+        LambertMaterial invalid_material(Vector3(0.5f, 0.8f, 0.6f));  // Valid construction
+        invalid_material.base_color = Vector3(1.5f, 0.8f, 0.6f);  // Manually set invalid albedo
         
         assert(!invalid_material.validate_energy_conservation());
         std::cout << "  Energy conservation violation detected: PASS" << std::endl;
@@ -953,8 +955,10 @@ namespace MathematicalTests {
         std::cout << "  Testing sphere validation..." << std::endl;
         assert(test_sphere.validate_geometry());  // Valid sphere
         
-        Sphere invalid_sphere(Point3(0, 0, 0), -1.0f, 0);  // Negative radius
-        assert(!invalid_sphere.validate_geometry());  // Should be invalid
+        // Test validation by creating sphere and manually setting invalid radius after construction
+        Sphere test_validation_sphere(Point3(0, 0, 0), 1.0f, 0);  // Valid construction
+        test_validation_sphere.radius = -1.0f;  // Manually set invalid radius
+        assert(!test_validation_sphere.validate_geometry());  // Should now be invalid
         
         std::cout << "  Ray-sphere intersection mathematics: PASSED" << std::endl;
         return true;
@@ -970,7 +974,8 @@ namespace MathematicalTests {
         
         // Test Case 2: Invalid albedo (energy violating)
         std::cout << "  Testing invalid albedo..." << std::endl;
-        LambertMaterial invalid_material(Vector3(1.5f, 0.5f, 0.5f));  // Red > 1.0
+        LambertMaterial invalid_material(Vector3(0.5f, 0.5f, 0.5f));  // Valid construction
+        invalid_material.base_color = Vector3(1.5f, 0.5f, 0.5f);  // Manually set invalid albedo
         assert(!invalid_material.validate_energy_conservation());
         
         // Test Case 3: BRDF mathematical correctness
@@ -1455,10 +1460,18 @@ sphere -1.0 1.0 -4.5 0.6 blue_mat
         assert(loaded_scene.materials.size() == 3);
         assert(loaded_scene.primitives.size() == 3);
         
-        // Verify material colors
-        assert(std::abs(loaded_scene.materials[0].base_color.x - 0.8f) < 1e-5f);  // Red material
-        assert(std::abs(loaded_scene.materials[1].base_color.y - 0.8f) < 1e-5f);  // Green material
-        assert(std::abs(loaded_scene.materials[2].base_color.z - 0.8f) < 1e-5f);  // Blue material
+        // Verify material colors using dynamic_cast
+        auto* red_material = dynamic_cast<LambertMaterial*>(loaded_scene.materials[0].get());
+        auto* green_material = dynamic_cast<LambertMaterial*>(loaded_scene.materials[1].get());
+        auto* blue_material = dynamic_cast<LambertMaterial*>(loaded_scene.materials[2].get());
+        
+        assert(red_material != nullptr);
+        assert(green_material != nullptr);
+        assert(blue_material != nullptr);
+        
+        assert(std::abs(red_material->base_color.x - 0.8f) < 1e-5f);    // Red material
+        assert(std::abs(green_material->base_color.y - 0.8f) < 1e-5f);  // Green material
+        assert(std::abs(blue_material->base_color.z - 0.8f) < 1e-5f);   // Blue material
         
         // Verify sphere positions and materials
         Sphere& first_sphere = loaded_scene.primitives[0];
@@ -1560,7 +1573,8 @@ sphere 0 0 0 -1.0 nonexistent_material  # Negative radius, invalid material
         int mat_idx = validation_scene.add_material(valid_material);
         
         // Try to add sphere with negative radius
-        Sphere invalid_sphere(Point3(0, 0, -5), -1.0f, mat_idx);
+        Sphere invalid_sphere(Point3(0, 0, -5), 1.0f, mat_idx);  // Valid construction
+        invalid_sphere.radius = -1.0f;  // Manually set invalid radius
         int invalid_result = validation_scene.add_sphere(invalid_sphere);
         assert(invalid_result == -1);  // Should reject invalid sphere
         assert(validation_scene.primitives.size() == 0);
@@ -1578,7 +1592,8 @@ sphere 0 0 0 -1.0 nonexistent_material  # Negative radius, invalid material
         LambertMaterial valid_energy_material(Vector3(0.9f, 0.9f, 0.9f));
         assert(valid_energy_material.validate_energy_conservation());
         
-        LambertMaterial invalid_energy_material(Vector3(1.5f, 0.8f, 0.6f));
+        LambertMaterial invalid_energy_material(Vector3(0.5f, 0.8f, 0.6f));  // Valid construction
+        invalid_energy_material.base_color = Vector3(1.5f, 0.8f, 0.6f);  // Manually set invalid albedo
         assert(!invalid_energy_material.validate_energy_conservation());
         
         // Scene should accept materials regardless of energy conservation for educational purposes
@@ -2013,6 +2028,243 @@ sphere 0 0 0 -1.0 nonexistent_material  # Negative radius, invalid material
         return test1_pass && test2_pass;
     }
 
+    // === STORY 3.5: POLYMORPHIC MATERIAL INTEGRATION TESTS ===
+    
+    bool test_polymorphic_material_creation_and_validation() {
+        std::cout << "\n=== Polymorphic Material Creation and Validation Test ===" << std::endl;
+        
+        // Test 1: Lambert material through polymorphic interface
+        std::cout << "Test 1: Lambert material polymorphic creation..." << std::endl;
+        auto lambert_material = std::make_unique<LambertMaterial>(Vector3(0.8f, 0.6f, 0.4f));
+        
+        // Validate polymorphic interface
+        assert(lambert_material->type == MaterialType::Lambert);
+        assert(lambert_material->validate_parameters());
+        std::cout << "  Lambert material type: " << lambert_material->material_type_name() << std::endl;
+        std::cout << "  Base color: (" << lambert_material->base_color.x << ", " 
+                  << lambert_material->base_color.y << ", " << lambert_material->base_color.z << ")" << std::endl;
+        
+        // Test 2: Cook-Torrance material through polymorphic interface  
+        std::cout << "Test 2: Cook-Torrance material polymorphic creation..." << std::endl;
+        auto ct_material = std::make_unique<CookTorranceMaterial>(Vector3(0.9f, 0.7f, 0.3f), 0.3f, 1.0f, 0.04f);
+        
+        // Validate polymorphic interface
+        assert(ct_material->type == MaterialType::CookTorrance);
+        assert(ct_material->validate_parameters());
+        std::cout << "  Cook-Torrance material type: " << ct_material->material_type_name() << std::endl;
+        std::cout << "  Roughness: " << ct_material->roughness << ", Metallic: " << ct_material->metallic << std::endl;
+        
+        // Test 3: Parameter clamping validation
+        std::cout << "Test 3: Parameter clamping validation..." << std::endl;
+        auto invalid_material = std::make_unique<CookTorranceMaterial>(Vector3(1.5f, -0.2f, 0.8f), 2.0f, 1.5f, -0.1f);
+        
+        // Parameters should be automatically clamped during construction
+        assert(invalid_material->base_color.x <= 1.0f);
+        assert(invalid_material->base_color.y >= 0.0f);
+        assert(invalid_material->roughness >= 0.01f && invalid_material->roughness <= 1.0f);
+        assert(invalid_material->metallic >= 0.0f && invalid_material->metallic <= 1.0f);
+        assert(invalid_material->specular >= 0.0f && invalid_material->specular <= 1.0f);
+        
+        std::cout << "  Parameters successfully clamped to valid ranges" << std::endl;
+        
+        std::cout << "Polymorphic material creation test: PASS" << std::endl;
+        return true;
+    }
+    
+    bool test_polymorphic_brdf_evaluation() {
+        std::cout << "\n=== Polymorphic BRDF Evaluation Test ===" << std::endl;
+        
+        // Setup common test vectors
+        Vector3 incident_dir = Vector3(0.707f, 0.707f, 0.0f).normalize();  // 45-degree incident
+        Vector3 outgoing_dir = Vector3(0.0f, 0.0f, 1.0f);                 // View along normal
+        Vector3 surface_normal = Vector3(0.0f, 0.0f, 1.0f);               // Up-facing normal
+        
+        std::cout << "Common test setup:" << std::endl;
+        std::cout << "  Incident direction: (" << incident_dir.x << ", " << incident_dir.y << ", " << incident_dir.z << ")" << std::endl;
+        std::cout << "  Outgoing direction: (" << outgoing_dir.x << ", " << outgoing_dir.y << ", " << outgoing_dir.z << ")" << std::endl;
+        std::cout << "  Surface normal: (" << surface_normal.x << ", " << surface_normal.y << ", " << surface_normal.z << ")" << std::endl;
+        
+        // Test 1: Lambert BRDF evaluation through polymorphic interface
+        std::cout << "Test 1: Lambert BRDF polymorphic evaluation..." << std::endl;
+        Material* lambert_ptr = new LambertMaterial(Vector3(0.7f, 0.7f, 0.7f));
+        Vector3 lambert_brdf = lambert_ptr->evaluate_brdf(incident_dir, outgoing_dir, surface_normal, false);
+        
+        // Lambert BRDF should be constant: base_color / π
+        float expected_lambert = 0.7f / M_PI;
+        assert(std::abs(lambert_brdf.x - expected_lambert) < 1e-6);
+        assert(std::abs(lambert_brdf.y - expected_lambert) < 1e-6);
+        assert(std::abs(lambert_brdf.z - expected_lambert) < 1e-6);
+        
+        std::cout << "  Lambert BRDF result: (" << lambert_brdf.x << ", " << lambert_brdf.y << ", " << lambert_brdf.z << ")" << std::endl;
+        std::cout << "  Expected: " << expected_lambert << " (base_color/π)" << std::endl;
+        
+        // Test 2: Cook-Torrance BRDF evaluation through polymorphic interface
+        std::cout << "Test 2: Cook-Torrance BRDF polymorphic evaluation..." << std::endl;
+        Material* ct_ptr = new CookTorranceMaterial(Vector3(0.8f, 0.8f, 0.8f), 0.3f, 0.0f, 0.04f);
+        Vector3 ct_brdf = ct_ptr->evaluate_brdf(incident_dir, outgoing_dir, surface_normal, false);
+        
+        // Cook-Torrance should give different result than Lambert
+        assert(std::abs(ct_brdf.x - lambert_brdf.x) > 1e-6);  // Should be noticeably different
+        assert(ct_brdf.x >= 0 && ct_brdf.y >= 0 && ct_brdf.z >= 0);  // Non-negative
+        assert(std::isfinite(ct_brdf.x) && std::isfinite(ct_brdf.y) && std::isfinite(ct_brdf.z));  // Finite
+        
+        std::cout << "  Cook-Torrance BRDF result: (" << ct_brdf.x << ", " << ct_brdf.y << ", " << ct_brdf.z << ")" << std::endl;
+        std::cout << "  Validation: Non-negative, finite, different from Lambert" << std::endl;
+        
+        // Test 3: Energy conservation verification
+        std::cout << "Test 3: Energy conservation verification..." << std::endl;
+        
+        // For both materials, BRDF should not violate energy conservation
+        // This is a simplified check - full hemisphere integration would be more complete
+        float max_lambert_component = std::max({lambert_brdf.x, lambert_brdf.y, lambert_brdf.z});
+        float max_ct_component = std::max({ct_brdf.x, ct_brdf.y, ct_brdf.z});
+        
+        // Lambert: ρ/π where ρ ≤ 1, so BRDF ≤ 1/π ≈ 0.318
+        assert(max_lambert_component <= (1.0f / M_PI) + 1e-6);
+        
+        // Cook-Torrance: More complex, but should still be reasonable for these parameters
+        assert(max_ct_component <= 10.0f);  // Generous upper bound for this test case
+        
+        std::cout << "  Lambert max component: " << max_lambert_component << " (limit: 1/π ≈ 0.318)" << std::endl;
+        std::cout << "  Cook-Torrance max component: " << max_ct_component << " (reasonable range)" << std::endl;
+        
+        delete lambert_ptr;
+        delete ct_ptr;
+        
+        std::cout << "Polymorphic BRDF evaluation test: PASS" << std::endl;
+        return true;
+    }
+    
+    bool test_multi_material_scene_loading() {
+        std::cout << "\n=== Multi-Material Scene Loading Test ===" << std::endl;
+        
+        // Test scene content with mixed Lambert and Cook-Torrance materials
+        std::string multi_material_scene = R"(
+# Multi-material test scene
+# Educational test of polymorphic material parsing
+
+# Lambert materials
+material_lambert diffuse_red 0.8 0.3 0.3
+material_lambert diffuse_blue 0.3 0.3 0.8
+
+# Cook-Torrance materials  
+material_cook_torrance gold_rough 1.0 0.8 0.3 0.8 1.0 0.04
+material_cook_torrance plastic_smooth 0.2 0.8 0.4 0.1 0.0 0.04
+
+# Legacy Lambert material (backward compatibility)
+material legacy_green 0.3 0.8 0.3
+
+# Spheres using different material types
+sphere -2.0 0.0 -5.0 1.0 diffuse_red
+sphere -1.0 0.0 -5.0 1.0 gold_rough
+sphere 0.0 0.0 -5.0 1.0 plastic_smooth
+sphere 1.0 0.0 -5.0 1.0 diffuse_blue
+sphere 2.0 0.0 -5.0 1.0 legacy_green
+)";
+
+        std::cout << "Loading multi-material scene..." << std::endl;
+        Scene scene = SceneLoader::load_from_string(multi_material_scene);
+        
+        // Validate scene loaded correctly
+        assert(scene.materials.size() == 5);  // 5 materials total
+        assert(scene.primitives.size() == 5); // 5 spheres total
+        
+        std::cout << "  Materials loaded: " << scene.materials.size() << std::endl;
+        std::cout << "  Primitives loaded: " << scene.primitives.size() << std::endl;
+        
+        // Validate material types are correct
+        assert(scene.materials[0]->type == MaterialType::Lambert);      // diffuse_red
+        assert(scene.materials[1]->type == MaterialType::Lambert);      // diffuse_blue  
+        assert(scene.materials[2]->type == MaterialType::CookTorrance);  // gold_rough
+        assert(scene.materials[3]->type == MaterialType::CookTorrance);  // plastic_smooth
+        assert(scene.materials[4]->type == MaterialType::Lambert);      // legacy_green
+        
+        std::cout << "  Material types validated: 3 Lambert, 2 Cook-Torrance" << std::endl;
+        
+        // Test intersection with multi-material scene
+        Ray test_ray(Point3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, -1.0f));
+        Scene::Intersection hit = scene.intersect(test_ray, false);
+        
+        assert(hit.hit);
+        assert(hit.material != nullptr);
+        assert(hit.primitive != nullptr);
+        
+        std::cout << "  Ray intersection test: HIT" << std::endl;
+        std::cout << "  Hit material type: " << hit.material->material_type_name() << std::endl;
+        
+        std::cout << "Multi-material scene loading test: PASS" << std::endl;
+        return true;
+    }
+    
+    bool test_scene_material_brdf_integration() {
+        std::cout << "\n=== Scene Material BRDF Integration Test ===" << std::endl;
+        
+        // Create scene with both material types
+        Scene scene;
+        
+        // Add Lambert material
+        auto lambert_mat = std::make_unique<LambertMaterial>(Vector3(0.7f, 0.5f, 0.3f));
+        int lambert_idx = scene.add_material(std::move(lambert_mat));
+        
+        // Add Cook-Torrance material
+        auto ct_mat = std::make_unique<CookTorranceMaterial>(Vector3(0.9f, 0.7f, 0.3f), 0.2f, 1.0f, 0.04f);
+        int ct_idx = scene.add_material(std::move(ct_mat));
+        
+        // Add spheres with different materials
+        Sphere lambert_sphere(Point3(-1.0f, 0.0f, -5.0f), 1.0f, lambert_idx);
+        Sphere ct_sphere(Point3(1.0f, 0.0f, -5.0f), 1.0f, ct_idx);
+        
+        scene.add_sphere(lambert_sphere);
+        scene.add_sphere(ct_sphere);
+        
+        std::cout << "Scene setup: 2 materials, 2 spheres" << std::endl;
+        
+        // Test intersection and BRDF evaluation integration
+        Ray lambert_ray(Point3(-1.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, -1.0f));
+        Scene::Intersection lambert_hit = scene.intersect(lambert_ray, false);
+        
+        assert(lambert_hit.hit);
+        assert(lambert_hit.material->type == MaterialType::Lambert);
+        
+        Ray ct_ray(Point3(1.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, -1.0f));
+        Scene::Intersection ct_hit = scene.intersect(ct_ray, false);
+        
+        assert(ct_hit.hit);
+        assert(ct_hit.material->type == MaterialType::CookTorrance);
+        
+        // Test BRDF evaluation through scene intersection results
+        Vector3 incident = Vector3(0.0f, 0.707f, -0.707f).normalize();
+        Vector3 outgoing = Vector3(0.0f, 0.0f, 1.0f);
+        
+        Vector3 lambert_brdf = lambert_hit.material->evaluate_brdf(incident, outgoing, lambert_hit.normal, false);
+        Vector3 ct_brdf = ct_hit.material->evaluate_brdf(incident, outgoing, ct_hit.normal, false);
+        
+        // Validate BRDF results are reasonable
+        assert(lambert_brdf.x >= 0 && lambert_brdf.y >= 0 && lambert_brdf.z >= 0);
+        assert(ct_brdf.x >= 0 && ct_brdf.y >= 0 && ct_brdf.z >= 0);
+        assert(std::isfinite(lambert_brdf.x) && std::isfinite(ct_brdf.x));
+        
+        std::cout << "  Lambert sphere intersection: HIT, BRDF evaluated" << std::endl;
+        std::cout << "  Cook-Torrance sphere intersection: HIT, BRDF evaluated" << std::endl;
+        std::cout << "  BRDF values: Lambert(" << lambert_brdf.x << "), Cook-Torrance(" << ct_brdf.x << ")" << std::endl;
+        
+        // Test light scattering integration
+        Vector3 incident_light = incident;
+        Vector3 view_dir = outgoing;
+        Vector3 incident_radiance(1.0f, 1.0f, 1.0f);
+        
+        Vector3 lambert_scattered = lambert_hit.material->scatter_light(incident_light, view_dir, lambert_hit.normal, incident_radiance, false);
+        Vector3 ct_scattered = ct_hit.material->scatter_light(incident_light, view_dir, ct_hit.normal, incident_radiance, false);
+        
+        assert(lambert_scattered.x >= 0 && ct_scattered.x >= 0);
+        assert(std::isfinite(lambert_scattered.x) && std::isfinite(ct_scattered.x));
+        
+        std::cout << "  Light scattering: Both materials computed successfully" << std::endl;
+        
+        std::cout << "Scene material BRDF integration test: PASS" << std::endl;
+        return true;
+    }
+
 } // namespace MathematicalTests
 
 int main() {
@@ -2087,11 +2339,19 @@ int main() {
         all_passed &= MathematicalTests::test_cook_torrance_energy_conservation();
         all_passed &= MathematicalTests::test_cook_torrance_brdf_evaluation();
         
+        // Story 3.5: Polymorphic Material System Integration Tests
+        std::cout << "\n=== STORY 3.5: POLYMORPHIC MATERIAL SYSTEM TESTS ===" << std::endl;
+        all_passed &= MathematicalTests::test_polymorphic_material_creation_and_validation();
+        all_passed &= MathematicalTests::test_polymorphic_brdf_evaluation();
+        all_passed &= MathematicalTests::test_multi_material_scene_loading();
+        all_passed &= MathematicalTests::test_scene_material_brdf_integration();
+        
         if (all_passed) {
             std::cout << "\n✅ ALL MATHEMATICAL TESTS PASSED" << std::endl;
             std::cout << "Mathematical foundation verified for Epic 1 & 3 development." << std::endl;
             std::cout << "Story 1.3: Single-Ray Lambert BRDF Implementation - VALIDATED" << std::endl;
             std::cout << "Story 3.1: Pure Cook-Torrance BRDF Implementation - VALIDATED" << std::endl;
+            std::cout << "Story 3.5: Polymorphic Material System Integration - VALIDATED" << std::endl;
             return 0;
         } else {
             std::cout << "\n❌ SOME TESTS FAILED" << std::endl;

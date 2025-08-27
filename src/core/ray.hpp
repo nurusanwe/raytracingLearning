@@ -2,6 +2,7 @@
 #include "point3.hpp"
 #include "vector3.hpp"
 #include <cmath>
+#include <algorithm>
 
 // Ray represents a mathematical ray: infinite line starting at origin, extending in direction
 // Ray equation: P(t) = origin + t * direction, where t ≥ 0

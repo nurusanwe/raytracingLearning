@@ -1,5 +1,6 @@
 #pragma once
 #include "../core/vector3.hpp"
+#include "material_base.hpp"
 #include <cmath>
 #include <iostream>
 
@@ -60,15 +61,17 @@
 //   - Kajiya, J.T. "The Rendering Equation" SIGGRAPH 1986
 //   - Nicodemus, F.E. "Reflectance Nomenclature" NBS 1977
 //   - Pharr, Jakob, Humphreys "Physically Based Rendering" 4th ed.
-class LambertMaterial {
+class LambertMaterial : public Material {
 public:
-    Vector3 base_color;  // Albedo color - fraction of light reflected per wavelength (RGB channels)
-                        // Mathematical constraint: each component must be ∈ [0,1] for energy conservation
-
     // Constructor with explicit albedo color
     // Albedo interpretation: percentage of incident light reflected at each wavelength
     // Example: (0.8, 0.8, 0.8) reflects 80% of incident light across all wavelengths
-    LambertMaterial(const Vector3& color) : base_color(color) {}
+    // Mathematical constraint: each component must be ∈ [0,1] for energy conservation
+    LambertMaterial(const Vector3& color = Vector3(0.7f, 0.7f, 0.7f)) 
+        : Material(color, MaterialType::Lambert) {
+        // Automatically clamp parameters to physically valid ranges
+        clamp_to_valid_ranges();
+    }
 
     // Lambert BRDF evaluation: computes reflectance for given incident/outgoing directions
     // Mathematical formula: f_r(wi, wo) = ρ/π where ρ is albedo (base_color)
@@ -79,7 +82,7 @@ public:
     // wi: incident light direction (pointing toward surface, normalized)
     // wo: outgoing view direction (pointing toward camera, normalized) 
     // normal: surface normal at intersection point (outward-pointing, normalized)
-    Vector3 evaluate_brdf(const Vector3& wi, const Vector3& wo, const Vector3& normal, bool verbose = true) const {
+    Vector3 evaluate_brdf(const Vector3& wi, const Vector3& wo, const Vector3& normal, bool verbose = true) const override {
         if (verbose) {
             std::cout << "\n=== Lambert BRDF Evaluation ===" << std::endl;
             std::cout << "Incident direction (wi): (" << wi.x << ", " << wi.y << ", " << wi.z << ")" << std::endl;
@@ -105,6 +108,24 @@ public:
         return brdf_value;
     }
 
+    // Lambert-specific parameter validation implementation
+    // Validates that albedo values are within physically valid [0,1] range for energy conservation
+    bool validate_parameters() const override {
+        bool red_valid = (base_color.x >= 0.0f && base_color.x <= 1.0f);
+        bool green_valid = (base_color.y >= 0.0f && base_color.y <= 1.0f);
+        bool blue_valid = (base_color.z >= 0.0f && base_color.z <= 1.0f);
+        
+        return red_valid && green_valid && blue_valid;
+    }
+    
+    // Lambert-specific parameter clamping implementation
+    // Automatically clamps albedo values to [0,1] range to ensure energy conservation
+    void clamp_to_valid_ranges() override {
+        base_color.x = std::max(0.0f, std::min(1.0f, base_color.x));
+        base_color.y = std::max(0.0f, std::min(1.0f, base_color.y));
+        base_color.z = std::max(0.0f, std::min(1.0f, base_color.z));
+    }
+
     // Calculate Lambert scattering with n·l term for light transport equation
     // Full rendering equation component: L_o = f_r * L_i * cos(θ_i) * dω
     // cos(θ_i) = max(0, normal · light_direction) ensures no negative contribution
@@ -115,7 +136,7 @@ public:
     // normal: surface normal at intersection point (outward-pointing, normalized)
     // incident_radiance: incoming light energy (L_i in rendering equation)
     Vector3 scatter_light(const Vector3& light_direction, const Vector3& view_direction, 
-                         const Vector3& normal, const Vector3& incident_radiance, bool verbose = true) const {
+                         const Vector3& normal, const Vector3& incident_radiance, bool verbose = true) const override {
         if (verbose) {
             std::cout << "\n=== Lambert Light Scattering Calculation ===" << std::endl;
             std::cout << "Light direction: (" << light_direction.x << ", " << light_direction.y << ", " << light_direction.z << ")" << std::endl;
@@ -190,6 +211,56 @@ public:
 
         std::cout << "=== Energy conservation validation complete ===" << std::endl;
         return is_energy_conserving;
+    }
+
+    // Lambert-specific educational BRDF explanation override
+    // Provides detailed mathematical breakdown of Lambert diffuse reflection theory
+    void explain_brdf_evaluation(const Vector3& wi, const Vector3& wo, const Vector3& normal) const override {
+        std::cout << "\n=======================================================" << std::endl;
+        std::cout << "=== LAMBERT BRDF EDUCATIONAL BREAKDOWN ===" << std::endl;
+        std::cout << "=======================================================" << std::endl;
+        std::cout << "\nTHEORETICAL FOUNDATION:" << std::endl;
+        std::cout << "Lambert BRDF models perfectly diffuse reflection following Lambert's cosine law." << std::endl;
+        std::cout << "Physical principle: light scattered equally in all directions over hemisphere." << std::endl;
+        std::cout << "Mathematical foundation: BRDF is constant for all direction pairs." << std::endl;
+        std::cout << "\nBRDF Formula: f_r(wi,wo) = ρ/π" << std::endl;
+        std::cout << "Where:" << std::endl;
+        std::cout << "• ρ (albedo): fraction of light reflected per wavelength" << std::endl;
+        std::cout << "• π: normalization factor ensuring energy conservation" << std::endl;
+        std::cout << "\nPhysical Interpretation:" << std::endl;
+        std::cout << "• Models matte surfaces: chalk, unpolished wood, paper, fabric" << std::endl;
+        std::cout << "• Microscopic surface roughness causes isotropic scattering" << std::endl;
+        std::cout << "• Viewing angle independent brightness (unlike metals/glossy surfaces)" << std::endl;
+        
+        // Demonstrate actual calculation
+        Vector3 result = evaluate_brdf(wi, wo, normal, false);
+        std::cout << "\n=== LIVE CALCULATION DEMONSTRATION ===" << std::endl;
+        std::cout << "Current albedo ρ: (" << base_color.x << ", " << base_color.y << ", " << base_color.z << ")" << std::endl;
+        std::cout << "Lambert BRDF value: ρ/π = (" << result.x << ", " << result.y << ", " << result.z << ")" << std::endl;
+        
+        std::cout << "\n=== ENERGY CONSERVATION ANALYSIS ===" << std::endl;
+        bool energy_valid = validate_parameters();
+        if (energy_valid) {
+            std::cout << "✓ Albedo values within [0,1] range - energy conservation maintained" << std::endl;
+            std::cout << "✓ Material cannot reflect more energy than received (physically plausible)" << std::endl;
+        } else {
+            std::cout << "⚠ Albedo values outside [0,1] range - potential energy conservation violation" << std::endl;
+            std::cout << "⚠ Material might amplify light (non-physical behavior)" << std::endl;
+        }
+        
+        std::cout << "\n=== LAMBERT vs OTHER MATERIALS ===" << std::endl;
+        std::cout << "Comparison with other BRDF models:" << std::endl;
+        std::cout << "• Lambert: Constant f_r, viewing angle independent" << std::endl;
+        std::cout << "• Cook-Torrance: Variable f_r with viewing angle, specular highlights" << std::endl;
+        std::cout << "• Phong: Empirical model, not physically based" << std::endl;
+        std::cout << "\nLambert limitations:" << std::endl;
+        std::cout << "• No specular highlights or reflections" << std::endl;
+        std::cout << "• Cannot model glossy or metallic surfaces" << std::endl;
+        std::cout << "• Pure diffuse assumption rarely matches real materials exactly" << std::endl;
+        
+        std::cout << "\n=======================================================" << std::endl;
+        std::cout << "=== LAMBERT EDUCATIONAL BREAKDOWN COMPLETE ===" << std::endl;
+        std::cout << "=======================================================" << std::endl;
     }
 
     // Calculate hemispherical reflectance (total fraction of light reflected)
