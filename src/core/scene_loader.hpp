@@ -3,7 +3,10 @@
 #include "sphere.hpp"
 #include "../materials/lambert.hpp"
 #include "../materials/cook_torrance.hpp"
-#include "../materials/material_base.hpp"
+#include "../lights/light_base.hpp"
+#include "../lights/point_light.hpp"
+#include "../lights/directional_light.hpp"
+#include "../lights/area_light.hpp"
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -49,6 +52,7 @@ public:
         int line_number = 0;
         int materials_loaded = 0;
         int spheres_loaded = 0;
+        int lights_loaded = 0;
         
         while (std::getline(stream, line)) {
             line_number++;
@@ -95,6 +99,27 @@ public:
                     std::cout << "WARNING: Failed to parse sphere on line " << line_number << std::endl;
                 }
             }
+            else if (command == "light_point") {
+                if (parse_point_light(line_stream, scene)) {
+                    lights_loaded++;
+                } else {
+                    std::cout << "WARNING: Failed to parse point light on line " << line_number << std::endl;
+                }
+            }
+            else if (command == "light_directional") {
+                if (parse_directional_light(line_stream, scene)) {
+                    lights_loaded++;
+                } else {
+                    std::cout << "WARNING: Failed to parse directional light on line " << line_number << std::endl;
+                }
+            }
+            else if (command == "light_area") {
+                if (parse_area_light(line_stream, scene)) {
+                    lights_loaded++;
+                } else {
+                    std::cout << "WARNING: Failed to parse area light on line " << line_number << std::endl;
+                }
+            }
             else if (command == "scene_name" || command == "description") {
                 // Skip metadata for now
                 std::cout << "Metadata: " << command << std::endl;
@@ -108,6 +133,7 @@ public:
         std::cout << "Lines processed: " << line_number << std::endl;
         std::cout << "Materials loaded: " << materials_loaded << std::endl;
         std::cout << "Spheres loaded: " << spheres_loaded << std::endl;
+        std::cout << "Lights loaded: " << lights_loaded << std::endl;
         std::cout << "=== Scene loading complete ===" << std::endl;
         
         return scene;
@@ -294,5 +320,198 @@ private:
             std::cout << "ERROR: Failed to add sphere to scene" << std::endl;
             return false;
         }
+    }
+    
+    // Parse point light definition
+    // Format: light_point pos_x pos_y pos_z color_r color_g color_b intensity
+    static bool parse_point_light(std::istringstream& stream, Scene& scene) {
+        float x, y, z, r, g, b, intensity;
+        
+        if (!(stream >> x >> y >> z >> r >> g >> b >> intensity)) {
+            std::cout << "ERROR: Invalid point light format" << std::endl;
+            std::cout << "Expected: light_point x y z r g b intensity" << std::endl;
+            std::cout << "Example: light_point 2.0 3.0 -2.0 1.0 1.0 1.0 5.0" << std::endl;
+            std::cout << "Parameters:" << std::endl;
+            std::cout << "  position: world coordinates (x,y,z)" << std::endl;
+            std::cout << "  color: RGB components [0.0, 1.0]" << std::endl;
+            std::cout << "  intensity: dimensionless multiplier (typical: 1.0-10.0)" << std::endl;
+            return false;
+        }
+        
+        std::cout << "Parsing point light: position(" << x << ", " << y << ", " << z << ")" << std::endl;
+        std::cout << "  Color: (" << r << ", " << g << ", " << b << "), Intensity: " << intensity << std::endl;
+        
+        // Validate parameters
+        if (!validate_light_parameters(r, g, b, intensity)) {
+            return false;
+        }
+        
+        // Create point light
+        auto point_light = std::make_unique<PointLight>(
+            Vector3(x, y, z),       // position
+            Vector3(r, g, b),       // color
+            intensity               // intensity
+        );
+        
+        // Validate and clamp parameters if needed
+        if (!point_light->validate_parameters()) {
+            std::cout << "WARNING: Point light parameters outside valid range, clamping" << std::endl;
+            point_light->clamp_parameters();
+        }
+        
+        // Add light to scene
+        int light_index = scene.add_light(std::move(point_light));
+        std::cout << "Point light added at index " << light_index << std::endl;
+        
+        return true;
+    }
+    
+    // Parse directional light definition
+    // Format: light_directional dir_x dir_y dir_z color_r color_g color_b intensity
+    static bool parse_directional_light(std::istringstream& stream, Scene& scene) {
+        float dir_x, dir_y, dir_z, r, g, b, intensity;
+        
+        if (!(stream >> dir_x >> dir_y >> dir_z >> r >> g >> b >> intensity)) {
+            std::cout << "ERROR: Invalid directional light format" << std::endl;
+            std::cout << "Expected: light_directional dir_x dir_y dir_z r g b intensity" << std::endl;
+            std::cout << "Example: light_directional -0.5 -1.0 -0.5 1.0 0.9 0.8 2.0" << std::endl;
+            std::cout << "Parameters:" << std::endl;
+            std::cout << "  direction: normalized direction vector (from light to surface)" << std::endl;
+            std::cout << "  color: RGB components [0.0, 1.0]" << std::endl;
+            std::cout << "  intensity: dimensionless multiplier (typical: 0.5-5.0)" << std::endl;
+            return false;
+        }
+        
+        std::cout << "Parsing directional light: direction(" << dir_x << ", " << dir_y << ", " << dir_z << ")" << std::endl;
+        std::cout << "  Color: (" << r << ", " << g << ", " << b << "), Intensity: " << intensity << std::endl;
+        
+        // Validate parameters
+        if (!validate_light_parameters(r, g, b, intensity)) {
+            return false;
+        }
+        
+        // Validate direction vector
+        Vector3 direction(dir_x, dir_y, dir_z);
+        if (direction.length() < 1e-6f) {
+            std::cout << "ERROR: Invalid directional light direction (zero vector)" << std::endl;
+            return false;
+        }
+        
+        // Normalize direction automatically
+        direction = direction.normalize();
+        std::cout << "  Normalized direction: (" << direction.x << ", " << direction.y << ", " << direction.z << ")" << std::endl;
+        
+        // Create directional light
+        auto dir_light = std::make_unique<DirectionalLight>(
+            direction,              // direction
+            Vector3(r, g, b),       // color
+            intensity               // intensity
+        );
+        
+        // Validate and clamp parameters if needed
+        if (!dir_light->validate_parameters()) {
+            std::cout << "WARNING: Directional light parameters outside valid range, clamping" << std::endl;
+            dir_light->clamp_parameters();
+        }
+        
+        // Add light to scene
+        int light_index = scene.add_light(std::move(dir_light));
+        std::cout << "Directional light added at index " << light_index << std::endl;
+        
+        return true;
+    }
+    
+    // Parse area light definition
+    // Format: light_area center_x center_y center_z normal_x normal_y normal_z width height color_r color_g color_b intensity
+    static bool parse_area_light(std::istringstream& stream, Scene& scene) {
+        float cx, cy, cz, nx, ny, nz, width, height, r, g, b, intensity;
+        
+        if (!(stream >> cx >> cy >> cz >> nx >> ny >> nz >> width >> height >> r >> g >> b >> intensity)) {
+            std::cout << "ERROR: Invalid area light format" << std::endl;
+            std::cout << "Expected: light_area cx cy cz nx ny nz width height r g b intensity" << std::endl;
+            std::cout << "Example: light_area -1.0 2.0 -3.0 1.0 0.0 0.0 0.5 0.5 0.8 0.8 1.0 3.0" << std::endl;
+            std::cout << "Parameters:" << std::endl;
+            std::cout << "  center: center position of rectangular light (x,y,z)" << std::endl;
+            std::cout << "  normal: surface normal direction (will be normalized)" << std::endl;
+            std::cout << "  width, height: rectangular dimensions" << std::endl;
+            std::cout << "  color: RGB components [0.0, 1.0]" << std::endl;
+            std::cout << "  intensity: dimensionless multiplier (typical: 0.1-2.0)" << std::endl;
+            return false;
+        }
+        
+        std::cout << "Parsing area light: center(" << cx << ", " << cy << ", " << cz << ")" << std::endl;
+        std::cout << "  Normal: (" << nx << ", " << ny << ", " << nz << ")" << std::endl;
+        std::cout << "  Dimensions: " << width << " x " << height << std::endl;
+        std::cout << "  Color: (" << r << ", " << g << ", " << b << "), Intensity: " << intensity << std::endl;
+        
+        // Validate parameters
+        if (!validate_light_parameters(r, g, b, intensity)) {
+            return false;
+        }
+        
+        // Validate dimensions
+        if (width <= 0.0f || height <= 0.0f) {
+            std::cout << "ERROR: Invalid area light dimensions (width=" << width << ", height=" << height << ")" << std::endl;
+            std::cout << "Both width and height must be > 0" << std::endl;
+            return false;
+        }
+        
+        // Validate and normalize normal vector
+        Vector3 normal(nx, ny, nz);
+        if (normal.length() < 1e-6f) {
+            std::cout << "ERROR: Invalid area light normal (zero vector)" << std::endl;
+            return false;
+        }
+        
+        normal = normal.normalize();
+        std::cout << "  Normalized normal: (" << normal.x << ", " << normal.y << ", " << normal.z << ")" << std::endl;
+        
+        // Create area light
+        auto area_light = std::make_unique<AreaLight>(
+            Vector3(cx, cy, cz),    // center
+            normal,                 // normal
+            width,                  // width
+            height,                 // height
+            Vector3(r, g, b),       // color
+            intensity               // intensity
+        );
+        
+        // Validate and clamp parameters if needed
+        if (!area_light->validate_parameters()) {
+            std::cout << "WARNING: Area light parameters outside valid range, clamping" << std::endl;
+            area_light->clamp_parameters();
+        }
+        
+        // Add light to scene
+        int light_index = scene.add_light(std::move(area_light));
+        std::cout << "Area light added at index " << light_index << std::endl;
+        
+        return true;
+    }
+    
+    // Common light parameter validation
+    static bool validate_light_parameters(float r, float g, float b, float intensity) {
+        // Validate color components
+        if (r < 0.0f || r > 1.0f || g < 0.0f || g > 1.0f || b < 0.0f || b > 1.0f) {
+            std::cout << "ERROR: Light color components must be in range [0.0, 1.0]" << std::endl;
+            std::cout << "Provided: (" << r << ", " << g << ", " << b << ")" << std::endl;
+            return false;
+        }
+        
+        // Validate intensity (allow reasonable range)
+        if (intensity < 0.0f || intensity > 100.0f) {
+            std::cout << "ERROR: Light intensity must be in range [0.0, 100.0]" << std::endl;
+            std::cout << "Provided: " << intensity << std::endl;
+            std::cout << "Educational note: Values > 10.0 may cause overexposed images" << std::endl;
+            return false;
+        }
+        
+        // Check for finite values
+        if (!std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b) || !std::isfinite(intensity)) {
+            std::cout << "ERROR: Non-finite light parameters" << std::endl;
+            return false;
+        }
+        
+        return true;
     }
 };

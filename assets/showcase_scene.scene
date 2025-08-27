@@ -34,6 +34,24 @@ sphere 1.5 1.0 -5.5 0.9 warm_orange
 sphere 0.5 -1.5 -7.0 0.7 deep_purple
 sphere -1.5 -0.8 -7.5 0.5 cool_cyan
 
+# ================================================
+# LIGHTING SYSTEM: MULTI-LIGHT DEMONSTRATION
+# ================================================
+# Three-point lighting setup for professional scene illumination
+# Demonstrates multiple light types working together
+
+# Key Light: Primary illumination from front-right
+# Provides main illumination and defines primary shadows
+light_point 3.0 2.0 -1.0 1.0 0.95 0.8 4.0
+
+# Fill Light: Softer illumination from left to reduce harsh shadows
+# Balances the key light and provides secondary illumination
+light_point -2.0 1.0 -3.0 0.8 0.9 1.0 2.0
+
+# Rim Light: Directional light from behind for edge definition
+# Creates edge highlights and separates objects from background
+light_directional 0.3 -0.5 1.0 0.9 0.8 1.0 1.5
+
 # Educational Notes:
 # Scene Design Philosophy:
 # - 11 spheres total for complex intersection testing
@@ -56,3 +74,11 @@ sphere -1.5 -0.8 -7.5 0.5 cool_cyan
 # - Back row creates atmospheric perspective
 # - Color progression from warm (front) to cool (back) adds depth
 # - Size variation creates natural focal hierarchy
+#
+# Multi-Light Design Philosophy:
+# - Key light: Warm white (1.0, 0.95, 0.8) for primary subject illumination
+# - Fill light: Cool white (0.8, 0.9, 1.0) for shadow balance and color variety
+# - Rim light: Neutral warm (0.9, 0.8, 1.0) for edge definition and depth
+# - Three-point lighting creates professional photographic quality
+# - Different light types demonstrate various illumination models
+# - Light intensity balanced to prevent overexposure while maintaining visibility

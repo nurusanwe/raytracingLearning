@@ -6,8 +6,6 @@
 #include <iostream>
 #include <string>
 #include <stdexcept>
-#include <sstream>
-#include <iomanip>
 
 // STB Image Write implementation
 #define STB_IMAGE_WRITE_IMPLEMENTATION
