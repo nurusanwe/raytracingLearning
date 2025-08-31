@@ -13,7 +13,13 @@
 #include "core/image.hpp"
 #include "core/performance_timer.hpp"
 #include "core/progress_reporter.hpp"
+#include "ui/material_editor.hpp"
+#include "ui/scene_manager.hpp"
+#include "ui/parameter_validator.hpp"
+#include "ui/preset_manager.hpp"
+#include "utils/image_viewer.hpp"
 #include <chrono>
+#include <filesystem>
 
 // Cross-platform preprocessor directives
 #ifdef PLATFORM_APPLE
@@ -48,6 +54,10 @@ int main(int argc, char* argv[]) {
             std::cout << "\nDebug and verbosity parameters:" << std::endl;
             std::cout << "--quiet               Minimal output (no educational breakdowns, errors only)" << std::endl;
             std::cout << "--verbose             Full educational output (default behavior)" << std::endl;
+            std::cout << "\nInteractive mode (Story 3.3):" << std::endl;
+            std::cout << "--interactive         Enable interactive Cook-Torrance material editor" << std::endl;
+            std::cout << "                      Supports real-time parameter adjustment, scene loading" << std::endl;
+            std::cout << "                      Material presets, and educational feedback" << std::endl;
             std::cout << "\nQuick presets:" << std::endl;
             std::cout << "--preset showcase     Epic 2 showcase (1024x768, complex scene, optimal camera)" << std::endl;
             std::cout << "--showcase            Shorthand for --preset showcase" << std::endl;
@@ -70,6 +80,7 @@ int main(int argc, char* argv[]) {
     // Epic 2 Showcase Defaults - optimized to demonstrate all capabilities
     std::string scene_filename = "../assets/showcase_scene.scene";  // Enhanced showcase scene
     bool use_scene_file = true;
+    bool scene_explicitly_set = false;  // Track if user explicitly set scene preferences
     Resolution image_resolution = Resolution::parse_from_string("1024x768");  // High-quality 4:3 aspect ratio
     
     // Cook-Torrance material parameters (Story 3.1)
@@ -80,14 +91,18 @@ int main(int argc, char* argv[]) {
     
     // Debug and verbosity control parameters
     bool quiet_mode = false;               // Minimal output mode
+    bool interactive_mode = false;         // Interactive Cook-Torrance editor mode (Story 3.3)
     
     for (int i = 1; i < argc; i++) {
         if (std::strcmp(argv[i], "--scene") == 0 && i + 1 < argc) {
             scene_filename = argv[i + 1];
+            use_scene_file = true;
+            scene_explicitly_set = true;
             std::cout << "Scene file override: " << scene_filename << std::endl;
             i++;  // Skip next argument since we consumed it
         } else if (std::strcmp(argv[i], "--no-scene") == 0) {
             use_scene_file = false;
+            scene_explicitly_set = true;
             std::cout << "Scene loading disabled - using hardcoded sphere" << std::endl;
         } else if (std::strcmp(argv[i], "--resolution") == 0 && i + 1 < argc) {
             try {
@@ -186,6 +201,14 @@ int main(int argc, char* argv[]) {
         } else if (std::strcmp(argv[i], "--verbose") == 0) {
             quiet_mode = false;
             std::cout << "Verbose mode enabled - full educational output" << std::endl;
+        } else if (std::strcmp(argv[i], "--interactive") == 0) {
+            interactive_mode = true;
+            material_type = "cook-torrance";  // Force Cook-Torrance for interactive mode
+            quiet_mode = true;  // Default to quiet mode for better interactivity
+            if (!scene_explicitly_set) {
+                use_scene_file = false;  // Default to single-sphere mode for interactive
+            }
+            std::cout << "Interactive mode enabled - Cook-Torrance material editor (quiet mode default)" << std::endl;
         } else if (strncmp(argv[i], "--", 2) == 0) {
             // Check if it's a known camera argument (handled later by camera.set_from_command_line_args)
             if (std::strcmp(argv[i], "--camera-pos") == 0 || 
@@ -196,7 +219,8 @@ int main(int argc, char* argv[]) {
                 std::strcmp(argv[i], "--metallic") == 0 ||
                 std::strcmp(argv[i], "--specular") == 0 ||
                 std::strcmp(argv[i], "--quiet") == 0 ||
-                std::strcmp(argv[i], "--verbose") == 0) {
+                std::strcmp(argv[i], "--verbose") == 0 ||
+                std::strcmp(argv[i], "--interactive") == 0) {
                 // Valid camera or material argument, skip it and its parameter
                 if (i + 1 < argc) i++; // Skip parameter if it exists
             } else {
@@ -540,9 +564,9 @@ int main(int argc, char* argv[]) {
     std::cout << "Sphere material albedo: (" << sphere_material.base_color.x << ", " << sphere_material.base_color.y << ", " << sphere_material.base_color.z << ")" << std::endl;
     
     // Point light source with explicit position and color
-    Vector3 light_position(2, 2, -3);  // Light positioned above and to the right of sphere
+    Vector3 light_position(2, 2, 0);   // Light positioned above, to the right, and IN FRONT of sphere
     Vector3 light_color(1.0f, 1.0f, 1.0f);  // White light
-    float light_intensity = 10.0f;  // Bright light to overcome distance falloff
+    float light_intensity = 100.0f;  // Much brighter light needed for metallic Cook-Torrance materials
     PointLight scene_light(light_position, light_color, light_intensity);
     std::cout << "Light position: (" << light_position.x << ", " << light_position.y << ", " << light_position.z << ")" << std::endl;
     std::cout << "Light color: (" << light_color.x << ", " << light_color.y << ", " << light_color.z << ")" << std::endl;
@@ -690,7 +714,7 @@ int main(int argc, char* argv[]) {
     
     // Scene setup: load from file or create default scene
     Scene render_scene;
-    PointLight image_light(Vector3(2, 2, -3), Vector3(1.0f, 1.0f, 1.0f), 10.0f);
+    PointLight image_light(Vector3(2, 2, 0), Vector3(1.0f, 1.0f, 1.0f), 100.0f);
     
     std::cout << "\n--- Scene Configuration ---" << std::endl;
     
@@ -718,7 +742,31 @@ int main(int argc, char* argv[]) {
                 std::cout << "Roughness: " << roughness_param << std::endl;
                 std::cout << "Metallic: " << metallic_param << std::endl;
                 std::cout << "Specular: " << specular_param << std::endl;
-                std::cout << "\nUsing Cook-Torrance rendering path (bypassing Scene system)" << std::endl;
+            }
+            
+            if (interactive_mode) {
+                // For interactive mode, create Cook-Torrance sphere in Scene system
+                std::cout << "Creating Cook-Torrance sphere in Scene system for interactive mode" << std::endl;
+                auto default_cook_material = std::make_unique<CookTorranceMaterial>(Vector3(0.7f, 0.3f, 0.3f), roughness_param, metallic_param, specular_param, !quiet_mode);
+                int material_idx = render_scene.add_material(std::move(default_cook_material));
+                Sphere default_sphere(Point3(0, 0, -3), 1.0f, material_idx, !quiet_mode);
+                render_scene.add_sphere(default_sphere);
+                
+                // Add multiple point lights for better metallic illumination
+                std::cout << "Adding multiple point lights to scene for better metallic material illumination" << std::endl;
+                auto scene_light1 = std::make_unique<PointLight>(Vector3(2, 2, 0), Vector3(1.0f, 1.0f, 1.0f), 100.0f);
+                auto scene_light2 = std::make_unique<PointLight>(Vector3(-2, 1, 0), Vector3(1.0f, 1.0f, 1.0f), 80.0f);
+                auto scene_light3 = std::make_unique<PointLight>(Vector3(0, -2, 1), Vector3(1.0f, 1.0f, 1.0f), 60.0f);
+                render_scene.add_light(std::move(scene_light1));
+                render_scene.add_light(std::move(scene_light2));
+                render_scene.add_light(std::move(scene_light3));
+                
+                render_scene.print_scene_statistics();
+            } else {
+                // Non-interactive mode: use original Cook-Torrance rendering path (bypassing Scene system)
+                if (!quiet_mode) {
+                    std::cout << "\nUsing Cook-Torrance rendering path (bypassing Scene system)" << std::endl;
+                }
             }
         } else {
             // Use Scene system for Lambert materials
@@ -726,23 +774,20 @@ int main(int argc, char* argv[]) {
             int material_idx = render_scene.add_material(default_material);
             Sphere default_sphere(Point3(0, 0, -3), 1.0f, material_idx, !quiet_mode);
             render_scene.add_sphere(default_sphere);
+            
+            // Add the point light to the scene for proper lighting
+            std::cout << "Adding point light to scene for Lambert single-sphere mode" << std::endl;
+            auto scene_light = std::make_unique<PointLight>(Vector3(2, 2, 0), Vector3(1.0f, 1.0f, 1.0f), 100.0f);
+            render_scene.add_light(std::move(scene_light));
+            
             render_scene.print_scene_statistics();
         }
     }
     
-    // Image buffer creation using Resolution with performance monitoring
-    performance_timer.start_phase(PerformanceTimer::IMAGE_OUTPUT);
-    Image output_image(image_resolution);
-    performance_timer.record_memory_usage(output_image.memory_usage_bytes());
-    performance_timer.end_phase(PerformanceTimer::IMAGE_OUTPUT);
-    
     std::cout << "\n--- Image Buffer Configuration ---" << std::endl;
-    std::cout << "Created " << image_width << "×" << image_height << " image buffer" << std::endl;
+    std::cout << "Creating " << image_width << "×" << image_height << " image buffer" << std::endl;
     std::cout << "Pixel storage: Vector3 (linear RGB)" << std::endl;
     std::cout << "Color management: Clamping + gamma correction pipeline" << std::endl;
-    
-    // Educational color management explanation
-    output_image.explain_color_management();
     
     // Performance counters for legacy compatibility
     int rays_generated = 0;
@@ -753,182 +798,215 @@ int main(int argc, char* argv[]) {
     // Start comprehensive timing for ray generation phase
     auto ray_generation_start = std::chrono::high_resolution_clock::now();
     
-    std::cout << "\n--- Multi-Ray Rendering Process ---" << std::endl;
-    std::cout << "Beginning pixel-by-pixel ray generation with performance monitoring..." << std::endl;
-    
-    // Initialize comprehensive progress reporting (Story 2.4 AC: 4)
+    // Initialize main progress reporter for legacy compatibility
     int total_pixels = image_width * image_height;
     ProgressReporter progress_reporter(total_pixels, &performance_timer, quiet_mode);
     
-    // Multi-ray pixel sampling: one ray per pixel with comprehensive progress tracking
-    for (int y = 0; y < image_height; y++) {
+    // Abstract the main rendering logic into a reusable function
+    auto render_image = [&](int width, int height, bool use_scene_materials = true) -> Image {
+        Image rendered_image(width, height);
         
-        for (int x = 0; x < image_width; x++) {
-            // Phase 1: Ray Generation with precise timing
-            performance_timer.start_phase(PerformanceTimer::RAY_GENERATION);
-            Ray pixel_ray = render_camera.generate_ray(
-                static_cast<float>(x), 
-                static_cast<float>(y), 
-                image_width, 
-                image_height
-            );
-            performance_timer.end_phase(PerformanceTimer::RAY_GENERATION);
-            performance_timer.increment_counter(PerformanceTimer::RAY_GENERATION);
-            rays_generated++;
+        std::cout << "\n--- Multi-Ray Rendering Process ---" << std::endl;
+        std::cout << "Beginning pixel-by-pixel ray generation with performance monitoring..." << std::endl;
+        
+        // Initialize comprehensive progress reporting (Story 2.4 AC: 4)
+        int local_total_pixels = width * height;
+        ProgressReporter local_progress_reporter(local_total_pixels, &performance_timer, quiet_mode);
+        
+        // Performance counters for this render
+        int local_rays_generated = 0;
+        int local_intersection_tests = 0;
+        int local_shading_calculations = 0;
+        int local_background_pixels = 0;
+        
+        // Multi-ray pixel sampling: one ray per pixel with comprehensive progress tracking
+        for (int y = 0; y < height; y++) {
             
-            Vector3 pixel_color(0, 0, 0);  // Default background color (black)
-            
-            if (material_type == "cook-torrance") {
-                // Cook-Torrance rendering path (bypass Scene system)
-                performance_timer.start_phase(PerformanceTimer::INTERSECTION_TESTING);
+            for (int x = 0; x < width; x++) {
+                // Phase 1: Ray Generation with precise timing
+                performance_timer.start_phase(PerformanceTimer::RAY_GENERATION);
+                Ray pixel_ray = render_camera.generate_ray(
+                    static_cast<float>(x), 
+                    static_cast<float>(y), 
+                    width, 
+                    height
+                );
+                performance_timer.end_phase(PerformanceTimer::RAY_GENERATION);
+                performance_timer.increment_counter(PerformanceTimer::RAY_GENERATION);
+                local_rays_generated++;
                 
-                // Direct sphere intersection (single sphere at (0,0,-3) with radius 1.0)
-                Point3 sphere_center(0, 0, -3);
-                float sphere_radius = 1.0f;
-                Sphere cook_torrance_sphere(sphere_center, sphere_radius, 0, !quiet_mode);
-                Sphere::Intersection sphere_hit = cook_torrance_sphere.intersect(pixel_ray, !quiet_mode);
+                Vector3 pixel_color(0, 0, 0);  // Default background color (black)
                 
-                performance_timer.end_phase(PerformanceTimer::INTERSECTION_TESTING);
-                performance_timer.increment_counter(PerformanceTimer::INTERSECTION_TESTING);
-                intersection_tests++;
-                
-                if (sphere_hit.hit) {
-                    // Phase 3: Cook-Torrance Shading Calculation
-                    performance_timer.start_phase(PerformanceTimer::SHADING_CALCULATION);
-                    shading_calculations++;
+                if (use_scene_materials) {
+                    // Scene-based rendering path (use loaded scene)
+                    performance_timer.start_phase(PerformanceTimer::INTERSECTION_TESTING);
+                    Scene::Intersection intersection = render_scene.intersect(pixel_ray, !quiet_mode);
+                    performance_timer.end_phase(PerformanceTimer::INTERSECTION_TESTING);
+                    performance_timer.increment_counter(PerformanceTimer::INTERSECTION_TESTING);
+                    local_intersection_tests++;
                     
-                    // Create Cook-Torrance material using command-line base_color
-                    Vector3 base_color(0.7f, 0.3f, 0.3f);  // Default base color, should be configurable in future
-                    CookTorranceMaterial cook_torrance_material(base_color, roughness_param, metallic_param, specular_param, !quiet_mode);
-                    
-                    // Multi-light accumulation for Cook-Torrance (AC2 - Story 3.2)
-                    pixel_color = Vector3(0, 0, 0);  // Initialize accumulator
-                    Vector3 surface_point = Vector3(sphere_hit.point.x, sphere_hit.point.y, sphere_hit.point.z);
-                    Vector3 view_direction = (camera_position - sphere_hit.point).normalize();
-                    
-                    if (render_scene.lights.empty()) {
-                        // Fallback: Use hardcoded light for backward compatibility
-                        float pdf_fallback;
-                        Vector3 light_direction = image_light.sample_direction(surface_point, pdf_fallback);
-                        Vector3 temp_light_dir;
-                        float temp_distance;
-                        Vector3 incident_irradiance = image_light.illuminate(surface_point, temp_light_dir, temp_distance);
+                    if (intersection.hit) {
+                        // Phase 3: Shading Calculation using scene materials
+                        performance_timer.start_phase(PerformanceTimer::SHADING_CALCULATION);
+                        local_shading_calculations++;
                         
-                        pixel_color = cook_torrance_material.scatter_light(
-                            light_direction, view_direction, sphere_hit.normal, 
-                            incident_irradiance, !quiet_mode
-                        );
-                    } else {
-                        // Multi-light accumulation from scene for Cook-Torrance
-                        for (const auto& light : render_scene.lights) {
-                            Vector3 light_direction;
-                            float light_distance;
-                            Vector3 light_contribution = light->illuminate(surface_point, light_direction, light_distance);
+                        // Multi-light accumulation (AC2 - Story 3.2)
+                        pixel_color = Vector3(0, 0, 0);  // Initialize accumulator
+                        Vector3 surface_point = Vector3(intersection.point.x, intersection.point.y, intersection.point.z);
+                        Vector3 view_direction = (camera_position - intersection.point).normalize();
+                        
+                        if (render_scene.lights.empty()) {
+                            // Fallback: Use hardcoded light for backward compatibility
+                            float pdf_fallback;
+                            Vector3 light_direction = image_light.sample_direction(surface_point, pdf_fallback);
+                            Vector3 temp_light_dir;
+                            float temp_distance;
+                            Vector3 incident_irradiance = image_light.illuminate(surface_point, temp_light_dir, temp_distance);
                             
-                            // Shadow ray testing (AC3)
-                            if (!light->is_occluded(surface_point, light_direction, light_distance, render_scene)) {
-                                // Cook-Torrance BRDF evaluation for this light
-                                Vector3 brdf_contribution = cook_torrance_material.scatter_light(
-                                    light_direction, view_direction, sphere_hit.normal, 
-                                    light_contribution, false  // Disable verbose per-light to avoid spam
-                                );
-                                pixel_color += brdf_contribution;
+                            pixel_color = intersection.material->scatter_light(
+                                light_direction, view_direction, intersection.normal, 
+                                incident_irradiance, !quiet_mode
+                            );
+                        } else {
+                            // Multi-light accumulation from scene
+                            for (const auto& light : render_scene.lights) {
+                                Vector3 light_direction;
+                                float light_distance;
+                                Vector3 light_contribution = light->illuminate(surface_point, light_direction, light_distance);
+                                
+                                // Shadow ray testing (AC3)
+                                if (!light->is_occluded(surface_point, light_direction, light_distance, render_scene)) {
+                                    // BRDF evaluation for this light
+                                    Vector3 brdf_contribution = intersection.material->scatter_light(
+                                        light_direction, view_direction, intersection.normal, 
+                                        light_contribution, false  // Disable verbose per-light to avoid spam
+                                    );
+                                    pixel_color += brdf_contribution;
+                                }
+                            }
+                            
+                            // Educational output for multi-light (if enabled and first few pixels)
+                            if (!quiet_mode && (x + y * width) < 5) {
+                                std::cout << "\n=== Multi-Light Accumulation (Pixel " << (x + y * width) << ") ===" << std::endl;
+                                std::cout << "Scene lights: " << render_scene.lights.size() << std::endl;
+                                std::cout << "Final accumulated color: (" << pixel_color.x << ", " << pixel_color.y << ", " << pixel_color.z << ")" << std::endl;
                             }
                         }
-                        
-                        // Educational output for multi-light Cook-Torrance (if enabled and first few pixels)
-                        if (!quiet_mode && (x + y * image_width) < 3) {
-                            std::cout << "\n=== Cook-Torrance Multi-Light Accumulation (Pixel " << (x + y * image_width) << ") ===" << std::endl;
-                            std::cout << "Scene lights: " << render_scene.lights.size() << std::endl;
-                            std::cout << "Final accumulated color: (" << pixel_color.x << ", " << pixel_color.y << ", " << pixel_color.z << ")" << std::endl;
-                        }
-                    }
-                    performance_timer.end_phase(PerformanceTimer::SHADING_CALCULATION);
-                    performance_timer.increment_counter(PerformanceTimer::SHADING_CALCULATION);
-                } else {
-                    // No intersection - background color
-                    background_pixels++;
-                    pixel_color = Vector3(0.1f, 0.1f, 0.15f);  // Dark blue background
-                }
-            } else {
-                // Lambert rendering path (use Scene system)
-                performance_timer.start_phase(PerformanceTimer::INTERSECTION_TESTING);
-                Scene::Intersection intersection = render_scene.intersect(pixel_ray, !quiet_mode);
-                performance_timer.end_phase(PerformanceTimer::INTERSECTION_TESTING);
-                performance_timer.increment_counter(PerformanceTimer::INTERSECTION_TESTING);
-                intersection_tests++;
-                
-                if (intersection.hit) {
-                    // Phase 3: Lambert Shading Calculation
-                    performance_timer.start_phase(PerformanceTimer::SHADING_CALCULATION);
-                    shading_calculations++;
-                    
-                    // Multi-light accumulation (AC2 - Story 3.2)
-                    pixel_color = Vector3(0, 0, 0);  // Initialize accumulator
-                    Vector3 surface_point = Vector3(intersection.point.x, intersection.point.y, intersection.point.z);
-                    Vector3 view_direction = (camera_position - intersection.point).normalize();
-                    
-                    if (render_scene.lights.empty()) {
-                        // Fallback: Use hardcoded light for backward compatibility
-                        float pdf_fallback;
-                        Vector3 light_direction = image_light.sample_direction(surface_point, pdf_fallback);
-                        Vector3 temp_light_dir;
-                        float temp_distance;
-                        Vector3 incident_irradiance = image_light.illuminate(surface_point, temp_light_dir, temp_distance);
-                        
-                        pixel_color = intersection.material->scatter_light(
-                            light_direction, view_direction, intersection.normal, 
-                            incident_irradiance, !quiet_mode
-                        );
+                        performance_timer.end_phase(PerformanceTimer::SHADING_CALCULATION);
+                        performance_timer.increment_counter(PerformanceTimer::SHADING_CALCULATION);
                     } else {
-                        // Multi-light accumulation from scene
-                        for (const auto& light : render_scene.lights) {
-                            Vector3 light_direction;
-                            float light_distance;
-                            Vector3 light_contribution = light->illuminate(surface_point, light_direction, light_distance);
+                        // No intersection - background color
+                        local_background_pixels++;
+                        pixel_color = Vector3(0.1f, 0.1f, 0.15f);  // Dark blue background
+                    }
+                } else if (material_type == "cook-torrance") {
+                    // Cook-Torrance rendering path (bypass Scene system)
+                    performance_timer.start_phase(PerformanceTimer::INTERSECTION_TESTING);
+                    
+                    // Direct sphere intersection (single sphere at (0,0,-3) with radius 1.0)
+                    Point3 sphere_center(0, 0, -3);
+                    float sphere_radius = 1.0f;
+                    Sphere cook_torrance_sphere(sphere_center, sphere_radius, 0, !quiet_mode);
+                    Sphere::Intersection sphere_hit = cook_torrance_sphere.intersect(pixel_ray, !quiet_mode);
+                    
+                    performance_timer.end_phase(PerformanceTimer::INTERSECTION_TESTING);
+                    performance_timer.increment_counter(PerformanceTimer::INTERSECTION_TESTING);
+                    local_intersection_tests++;
+                    
+                    if (sphere_hit.hit) {
+                        // Phase 3: Cook-Torrance Shading Calculation
+                        performance_timer.start_phase(PerformanceTimer::SHADING_CALCULATION);
+                        local_shading_calculations++;
+                        
+                        // Create Cook-Torrance material using command-line base_color
+                        Vector3 base_color(0.7f, 0.3f, 0.3f);  // Default base color, should be configurable in future
+                        CookTorranceMaterial cook_torrance_material(base_color, roughness_param, metallic_param, specular_param, !quiet_mode);
+                        
+                        // Multi-light accumulation for Cook-Torrance (AC2 - Story 3.2)
+                        pixel_color = Vector3(0, 0, 0);  // Initialize accumulator
+                        Vector3 surface_point = Vector3(sphere_hit.point.x, sphere_hit.point.y, sphere_hit.point.z);
+                        Vector3 view_direction = (camera_position - sphere_hit.point).normalize();
+                        
+                        if (render_scene.lights.empty()) {
+                            // Fallback: Use hardcoded light for backward compatibility
+                            float pdf_fallback;
+                            Vector3 light_direction = image_light.sample_direction(surface_point, pdf_fallback);
+                            Vector3 temp_light_dir;
+                            float temp_distance;
+                            Vector3 incident_irradiance = image_light.illuminate(surface_point, temp_light_dir, temp_distance);
                             
-                            // Shadow ray testing (AC3)
-                            if (!light->is_occluded(surface_point, light_direction, light_distance, render_scene)) {
-                                // BRDF evaluation for this light
-                                Vector3 brdf_contribution = intersection.material->scatter_light(
-                                    light_direction, view_direction, intersection.normal, 
-                                    light_contribution, false  // Disable verbose per-light to avoid spam
-                                );
-                                pixel_color += brdf_contribution;
+                            pixel_color = cook_torrance_material.scatter_light(
+                                light_direction, view_direction, sphere_hit.normal, 
+                                incident_irradiance, !quiet_mode
+                            );
+                        } else {
+                            // Multi-light accumulation from scene for Cook-Torrance
+                            for (const auto& light : render_scene.lights) {
+                                Vector3 light_direction;
+                                float light_distance;
+                                Vector3 light_contribution = light->illuminate(surface_point, light_direction, light_distance);
+                                
+                                // Shadow ray testing (AC3)
+                                if (!light->is_occluded(surface_point, light_direction, light_distance, render_scene)) {
+                                    // Cook-Torrance BRDF evaluation for this light
+                                    Vector3 brdf_contribution = cook_torrance_material.scatter_light(
+                                        light_direction, view_direction, sphere_hit.normal, 
+                                        light_contribution, false  // Disable verbose per-light to avoid spam
+                                    );
+                                    pixel_color += brdf_contribution;
+                                }
+                            }
+                            
+                            // Educational output for multi-light Cook-Torrance (if enabled and first few pixels)
+                            if (!quiet_mode && (x + y * width) < 3) {
+                                std::cout << "\n=== Cook-Torrance Multi-Light Accumulation (Pixel " << (x + y * width) << ") ===" << std::endl;
+                                std::cout << "Scene lights: " << render_scene.lights.size() << std::endl;
+                                std::cout << "Final accumulated color: (" << pixel_color.x << ", " << pixel_color.y << ", " << pixel_color.z << ")" << std::endl;
                             }
                         }
-                        
-                        // Educational output for multi-light (if enabled and first few pixels)
-                        if (!quiet_mode && (x + y * image_width) < 5) {
-                            std::cout << "\n=== Multi-Light Accumulation (Pixel " << (x + y * image_width) << ") ===" << std::endl;
-                            std::cout << "Scene lights: " << render_scene.lights.size() << std::endl;
-                            std::cout << "Final accumulated color: (" << pixel_color.x << ", " << pixel_color.y << ", " << pixel_color.z << ")" << std::endl;
-                        }
+                        performance_timer.end_phase(PerformanceTimer::SHADING_CALCULATION);
+                        performance_timer.increment_counter(PerformanceTimer::SHADING_CALCULATION);
+                    } else {
+                        // No intersection - background color
+                        local_background_pixels++;
+                        pixel_color = Vector3(0.1f, 0.1f, 0.15f);  // Dark blue background
                     }
-                    performance_timer.end_phase(PerformanceTimer::SHADING_CALCULATION);
-                    performance_timer.increment_counter(PerformanceTimer::SHADING_CALCULATION);
-                } else {
-                    // No intersection - background color
-                    background_pixels++;
-                    pixel_color = Vector3(0.1f, 0.1f, 0.15f);  // Dark blue background
                 }
+                
+                // Store pixel in image buffer (no additional timing - included in IMAGE_OUTPUT)
+                rendered_image.set_pixel(x, y, pixel_color);
             }
             
-            // Store pixel in image buffer (no additional timing - included in IMAGE_OUTPUT)
-            output_image.set_pixel(x, y, pixel_color);
+            // Update progress reporting after each row for better granularity
+            int completed_pixels = (y + 1) * width;
+            size_t current_memory = rendered_image.memory_usage_bytes() + render_scene.calculate_scene_memory_usage();
+            local_progress_reporter.update_progress(completed_pixels, current_memory);
+            
+            // Update the global progress reporter for main render compatibility
+            if (width == image_width && height == image_height) {
+                progress_reporter.update_progress(completed_pixels, current_memory);
+            }
+            
+            // Check for interrupt capability (placeholder for user cancellation)
+            if (local_progress_reporter.should_interrupt()) {
+                std::cout << "\nRendering interrupted by user request." << std::endl;
+                break;
+            }
         }
         
-        // Update progress reporting after each row for better granularity
-        int completed_pixels = (y + 1) * image_width;
-        size_t current_memory = output_image.memory_usage_bytes() + render_scene.calculate_scene_memory_usage();
-        progress_reporter.update_progress(completed_pixels, current_memory);
+        // Update global counters for compatibility
+        rays_generated += local_rays_generated;
+        intersection_tests += local_intersection_tests;
+        shading_calculations += local_shading_calculations;
+        background_pixels += local_background_pixels;
         
-        // Check for interrupt capability (placeholder for user cancellation)
-        if (progress_reporter.should_interrupt()) {
-            std::cout << "\nRendering interrupted by user request." << std::endl;
-            break;
-        }
-    }
+        return rendered_image;
+    };
+    
+    // Render the main image using the abstracted function
+    // Use scene materials for interactive mode, original logic for non-interactive
+    bool use_scene_materials_for_main_render = interactive_mode || use_scene_file;
+    Image output_image = render_image(image_width, image_height, use_scene_materials_for_main_render);
     
     // End comprehensive timing
     performance_timer.end_phase(PerformanceTimer::TOTAL_RENDER);
@@ -1050,6 +1128,12 @@ int main(int argc, char* argv[]) {
         std::cout << "✓ Acceptance Criteria 4: PNG image output COMPLETE" << std::endl;
         std::cout << "✓ Demonstrates successful rendering of simple sphere scene with visible Lambert shading" << std::endl;
         std::cout << "✓ Generated file: " << png_filename << std::endl;
+        
+        // Only open image in non-interactive mode (interactive mode has its own render)
+        if (!interactive_mode) {
+            std::cout << "✓ Opening image automatically for visual feedback..." << std::endl;
+            ImageViewer::open_image_async(png_filename);
+        }
     } else {
         std::cout << "✗ PNG output failed - check file permissions and disk space" << std::endl;
     }
@@ -1061,6 +1145,190 @@ int main(int argc, char* argv[]) {
     std::cout << "  - Future: N rays per pixel with sample averaging" << std::endl;
     std::cout << "  - Implementation: modify ray generation loop to sample multiple positions per pixel" << std::endl;
     std::cout << "  - Mathematical foundation: Monte Carlo integration over pixel area" << std::endl;
+
+    // Interactive Cook-Torrance Material Editor (Story 3.3)
+    if (interactive_mode) {
+        std::cout << "\n\n========================================" << std::endl;
+        std::cout << "=== INTERACTIVE COOK-TORRANCE EDITOR ===" << std::endl;
+        std::cout << "========================================" << std::endl;
+        std::cout << "\nInitial render complete. Starting interactive material editor..." << std::endl;
+        
+        // Create initial Cook-Torrance material for interactive editing
+        Vector3 initial_color(0.7f, 0.3f, 0.3f);
+        CookTorranceMaterial* interactive_material = new CookTorranceMaterial(initial_color, roughness_param, metallic_param, specular_param, false);
+        
+        // Initialize current scene name for tracking
+        std::string current_scene_name = use_scene_file ? std::filesystem::path(scene_filename).stem().string() : "single-sphere";
+        
+        // Interactive main loop
+        bool running = true;
+        while (running) {
+            std::cout << "\n=== Cook-Torrance Interactive Material Editor ===" << std::endl;
+            std::cout << "Current scene: " << current_scene_name << std::endl;
+            std::cout << "Current material: Cook-Torrance" << std::endl;
+            
+            std::cout << "\nAvailable options:" << std::endl;
+            
+            // Show different options based on whether we're using a scene file or single sphere
+            bool using_scene_file = (current_scene_name != "single-sphere");
+            
+            if (!using_scene_file) {
+                // Single-sphere mode: show material editing options
+                std::cout << "1. Adjust material parameters" << std::endl;
+                std::cout << "2. Load scene file" << std::endl;
+                std::cout << "3. Load material preset" << std::endl;
+                std::cout << "4. Save current material" << std::endl;
+                std::cout << "5. Render scene (with automatic image opening)" << std::endl;
+            } else {
+                // Scene file mode: hide material editing options
+                std::cout << "2. Load different scene file" << std::endl;
+                std::cout << "5. Render scene (with automatic image opening)" << std::endl;
+                std::cout << "\n   Note: Material editing (options 1,3,4) disabled in scene mode." << std::endl;
+                std::cout << "   Scene materials are loaded from the scene file." << std::endl;
+            }
+            std::cout << "0. Exit interactive mode" << std::endl;
+            
+            std::cout << "\nEnter your choice (0-5): ";
+            int choice;
+            std::cin >> choice;
+            
+            switch (choice) {
+                case 1: {
+                    if (using_scene_file) {
+                        std::cout << "\n⚠ Option 1 (Adjust material parameters) is disabled in scene mode." << std::endl;
+                        std::cout << "Scene materials are defined in the loaded scene file." << std::endl;
+                        std::cout << "Use option 2 to load a different scene or restart with --no-scene for material editing." << std::endl;
+                        break;
+                    }
+                    
+                    std::cout << "\n=== Material Parameter Adjustment ===" << std::endl;
+                    auto param_start = std::chrono::steady_clock::now();
+                    bool params_changed = MaterialEditor::get_user_parameter_input(interactive_material);
+                    auto param_end = std::chrono::steady_clock::now();
+                    auto param_duration = std::chrono::duration_cast<std::chrono::milliseconds>(param_end - param_start);
+                    std::cout << "Parameter update time: " << param_duration.count() << " ms" << std::endl;
+                    
+                    if (params_changed) {
+                        std::cout << "\nParameters updated successfully!" << std::endl;
+                        std::cout << "Use option 5 to render with new parameters." << std::endl;
+                    }
+                    break;
+                }
+                
+                case 2: {
+                    std::cout << "\n=== Scene File Loading ===" << std::endl;
+                    if (SceneManager::load_scene_interactive(render_scene, current_scene_name)) {
+                        std::cout << "Scene loaded successfully!" << std::endl;
+                        std::cout << "Use option 5 to render the new scene." << std::endl;
+                    }
+                    break;
+                }
+                
+                case 3: {
+                    if (using_scene_file) {
+                        std::cout << "\n⚠ Option 3 (Load material preset) is disabled in scene mode." << std::endl;
+                        std::cout << "Scene materials are defined in the loaded scene file." << std::endl;
+                        std::cout << "Use option 2 to load a different scene or restart with --no-scene for material editing." << std::endl;
+                        break;
+                    }
+                    
+                    std::cout << "\n=== Material Preset Loading ===" << std::endl;
+                    if (PresetManager::select_and_apply_preset(interactive_material)) {
+                        std::cout << "Preset applied successfully!" << std::endl;
+                        std::cout << "Use option 5 to render with the preset material." << std::endl;
+                    }
+                    break;
+                }
+                
+                case 4: {
+                    if (using_scene_file) {
+                        std::cout << "\n⚠ Option 4 (Save current material) is disabled in scene mode." << std::endl;
+                        std::cout << "Scene materials are defined in the loaded scene file." << std::endl;
+                        std::cout << "Use option 2 to load a different scene or restart with --no-scene for material editing." << std::endl;
+                        break;
+                    }
+                    
+                    std::cout << "\n=== Save Material Configuration ===" << std::endl;
+                    std::cout << "Enter preset name (without extension): ";
+                    std::string preset_name;
+                    std::cin >> preset_name;
+                    
+                    if (PresetManager::save_material_preset(*interactive_material, preset_name)) {
+                        std::cout << "Material saved successfully!" << std::endl;
+                    }
+                    break;
+                }
+                
+                case 5: {
+                    std::cout << "\n=== Interactive Scene Rendering ===" << std::endl;
+                    std::cout << "Updating scene material with interactive parameters..." << std::endl;
+                    
+                    // Update the scene material with current interactive_material parameters
+                    if (!render_scene.materials.empty()) {
+                        // Get the first (and only) material in single-sphere mode
+                        Material* scene_material = render_scene.materials[0].get();
+                        CookTorranceMaterial* cook_material = dynamic_cast<CookTorranceMaterial*>(scene_material);
+                        
+                        if (cook_material && interactive_material) {
+                            // Synchronize scene material with interactive material parameters
+                            cook_material->roughness = interactive_material->roughness;
+                            cook_material->metallic = interactive_material->metallic;
+                            cook_material->specular = interactive_material->specular;
+                            cook_material->set_base_color(interactive_material->base_color);
+                            cook_material->clamp_to_valid_ranges();
+                            
+                            std::cout << "✓ Scene material updated with current parameters:" << std::endl;
+                            std::cout << "  Roughness: " << cook_material->roughness << std::endl;
+                            std::cout << "  Metallic: " << cook_material->metallic << std::endl;
+                            std::cout << "  Base Color: (" << interactive_material->base_color.x << ", " 
+                                      << interactive_material->base_color.y << ", " << interactive_material->base_color.z << ")" << std::endl;
+                        }
+                    }
+                    
+                    auto render_start = std::chrono::steady_clock::now();
+                    
+                    // Use the exact same rendering pipeline as normal mode through abstracted function
+                    Image interactive_image = render_image(image_width, image_height, true);
+                    
+                    auto render_end = std::chrono::steady_clock::now();
+                    auto render_duration = std::chrono::duration_cast<std::chrono::milliseconds>(render_end - render_start);
+                    std::cout << "Interactive render time: " << render_duration.count() << " ms" << std::endl;
+                    
+                    // Save interactive render and open automatically
+                    std::string interactive_filename = "interactive_render.png";
+                    if (interactive_image.save_to_png(interactive_filename, true)) {
+                        std::cout << "✓ Interactive render complete!" << std::endl;
+                        std::cout << "✓ Generated: " << interactive_filename << std::endl;
+                        std::cout << "✓ Scene rendered with original materials" << std::endl;
+                        
+                        // Automatically open image for immediate visual feedback
+                        std::cout << "✓ Opening image automatically..." << std::endl;
+                        ImageViewer::open_image_async(interactive_filename);
+                    }
+                    break;
+                }
+                
+                
+                case 0: {
+                    std::cout << "\nExiting interactive mode..." << std::endl;
+                    running = false;
+                    break;
+                }
+                
+                default: {
+                    std::cout << "Invalid choice. Please enter 0-5." << std::endl;
+                    break;
+                }
+            }
+        }
+        
+        // Cleanup interactive material
+        delete interactive_material;
+        
+        std::cout << "\n=== Interactive Session Complete ===" << std::endl;
+        std::cout << "Thank you for using the Cook-Torrance Interactive Material Editor!" << std::endl;
+        std::cout << "All parameter changes and renders have been preserved." << std::endl;
+    }
     
     return 0;
 }

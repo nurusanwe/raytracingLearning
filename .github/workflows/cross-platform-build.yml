@@ -28,6 +28,7 @@ jobs:
       run: |
         # Epic 1: No dependencies needed
         # Epic 2+: Install Dear ImGui dependencies
+        brew list cmake && brew uninstall cmake || echo "cmake not installed"
         brew install cmake
         if [[ -d "external/imgui" ]]; then
           brew install glfw

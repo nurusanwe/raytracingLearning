@@ -8,6 +8,7 @@ echo "Starting build process with educational visibility..."
 
 # Create build directory
 echo "Creating build directory..."
+rm -rf build
 mkdir -p build
 cd build
 
