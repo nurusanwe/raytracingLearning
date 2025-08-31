@@ -6,6 +6,10 @@
 #include <iomanip>
 #include <algorithm>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 // Cook-Torrance Microfacet BRDF Implementation
 // Mathematical foundation: physically-based microfacet theory for realistic surface reflection
 // Physical principle: surface roughness modeled as microscopic facets with statistical distribution
@@ -386,12 +390,28 @@ public:
             return Vector3(0.0f, 0.0f, 0.0f);
         }
         
-        // Final BRDF calculation
-        Vector3 brdf_value = Vector3(
+        // Specular component calculation
+        Vector3 specular_component = Vector3(
             (D * G * F.x) / denominator,
             (D * G * F.y) / denominator,  
             (D * G * F.z) / denominator
         );
+        
+        // Add diffuse component for dielectric materials
+        // For dielectrics: f_r = specular + (1-F) * base_color / π
+        // For conductors: f_r = specular only (no diffuse transmission)
+        Vector3 diffuse_component = Vector3(0.0f, 0.0f, 0.0f);
+        if (metallic < 0.5f) {  // Dielectric material
+            Vector3 one_minus_f = Vector3(1.0f - F.x, 1.0f - F.y, 1.0f - F.z);
+            diffuse_component = Vector3(
+                one_minus_f.x * base_color.x / M_PI,
+                one_minus_f.y * base_color.y / M_PI,
+                one_minus_f.z * base_color.z / M_PI
+            );
+        }
+        
+        // Final BRDF calculation: specular + diffuse
+        Vector3 brdf_value = specular_component + diffuse_component;
         
         if (verbose) {
             std::cout << "\n=== Complete Cook-Torrance BRDF Result ===" << std::endl;
@@ -399,6 +419,8 @@ public:
             std::cout << "G (Geometry Function): " << G << std::endl;
             std::cout << "F (Fresnel): (" << F.x << ", " << F.y << ", " << F.z << ")" << std::endl;
             std::cout << "Denominator (4×n·l×n·v): " << denominator << std::endl;
+            std::cout << "Specular component: (" << specular_component.x << ", " << specular_component.y << ", " << specular_component.z << ")" << std::endl;
+            std::cout << "Diffuse component: (" << diffuse_component.x << ", " << diffuse_component.y << ", " << diffuse_component.z << ")" << std::endl;
             std::cout << "Final BRDF: (" << brdf_value.x << ", " << brdf_value.y << ", " << brdf_value.z << ")" << std::endl;
             std::cout << "=== Cook-Torrance BRDF evaluation complete ===" << std::endl;
         }
@@ -610,7 +632,7 @@ public:
     // Cook-Torrance-specific parameter validation implementation
     // Validates roughness, metallic, specular, and base color within physically valid ranges
     bool validate_parameters() const override {
-        bool roughness_valid = (roughness >= 0.01f && roughness <= 1.0f);
+        bool roughness_valid = (roughness >= 0.05f && roughness <= 1.0f);
         bool metallic_valid = (metallic >= 0.0f && metallic <= 1.0f);
         bool specular_valid = (specular >= 0.0f && specular <= 1.0f);
         bool color_valid = (base_color.x >= 0.0f && base_color.x <= 1.0f &&
@@ -623,7 +645,7 @@ public:
     // Cook-Torrance-specific parameter clamping implementation  
     // Automatically clamps all parameters to physically valid ranges
     void clamp_to_valid_ranges() override {
-        roughness = std::max(0.01f, std::min(1.0f, roughness));  // Prevent perfect mirror (numerical issues)
+        roughness = std::max(0.05f, std::min(1.0f, roughness));  // Prevent perfect mirror (numerical issues) - increased min for stability
         metallic = std::max(0.0f, std::min(1.0f, metallic));     // Binary or interpolated metallic workflow
         specular = std::max(0.0f, std::min(1.0f, specular));     // Physical reflectance bounds
         
@@ -638,7 +660,7 @@ public:
     bool validate_cook_torrance_parameters() const {
         std::cout << "\n=== Cook-Torrance Parameter Validation ===" << std::endl;
         
-        bool roughness_valid = (roughness >= 0.01f && roughness <= 1.0f);
+        bool roughness_valid = (roughness >= 0.05f && roughness <= 1.0f);
         bool metallic_valid = (metallic >= 0.0f && metallic <= 1.0f);
         bool specular_valid = (specular >= 0.0f && specular <= 1.0f);
         bool color_valid = (base_color.x >= 0.0f && base_color.x <= 1.0f &&
@@ -663,7 +685,177 @@ public:
         clamp_to_valid_ranges();
     }
 
+    // Real-time parameter update methods for interactive material editing
+    // These methods provide immediate parameter updates with validation and educational feedback
+
+    // Update roughness parameter with validation and educational feedback
+    // Parameters: new_roughness - new roughness value [0.01-1.0]
+    void set_roughness(float new_roughness) {
+        float old_roughness = roughness;
+        roughness = new_roughness;
+        clamp_to_valid_ranges();
+        
+        std::cout << "\n=== Roughness Parameter Update ===" << std::endl;
+        std::cout << "Previous roughness: " << old_roughness << std::endl;
+        std::cout << "New roughness: " << roughness << std::endl;
+        
+        if (std::abs(roughness - new_roughness) > 0.001f) {
+            std::cout << "Note: Value clamped to valid range [0.05-1.0]" << std::endl;
+        }
+        
+        explain_roughness_change(old_roughness, roughness);
+    }
+
+    // Update metallic parameter with validation and educational feedback
+    // Parameters: new_metallic - new metallic value [0.0-1.0]
+    void set_metallic(float new_metallic) {
+        float old_metallic = metallic;
+        metallic = new_metallic;
+        clamp_to_valid_ranges();
+        
+        std::cout << "\n=== Metallic Parameter Update ===" << std::endl;
+        std::cout << "Previous metallic: " << old_metallic << std::endl;
+        std::cout << "New metallic: " << metallic << std::endl;
+        
+        if (std::abs(metallic - new_metallic) > 0.001f) {
+            std::cout << "Note: Value clamped to valid range [0.0-1.0]" << std::endl;
+        }
+        
+        explain_metallic_change(old_metallic, metallic);
+    }
+
+    // Update base color parameter with validation and educational feedback
+    // Parameters: new_color - new base color values [0.0-1.0] per channel
+    void set_base_color(const Vector3& new_color) {
+        Vector3 old_color = base_color;
+        base_color = new_color;
+        clamp_to_valid_ranges();
+        
+        std::cout << "\n=== Base Color Parameter Update ===" << std::endl;
+        std::cout << "Previous color: (" << old_color.x << ", " << old_color.y << ", " << old_color.z << ")" << std::endl;
+        std::cout << "New color: (" << base_color.x << ", " << base_color.y << ", " << base_color.z << ")" << std::endl;
+        
+        float change_distance = (base_color - new_color).length();
+        if (change_distance > 0.001f) {
+            std::cout << "Note: Values clamped to valid range [0.0-1.0] per channel" << std::endl;
+        }
+        
+        explain_color_change(old_color, base_color);
+    }
+
 private:
+    // Educational explanations for parameter changes and their visual impact
+
+    // Explain the impact of roughness changes on material appearance
+    void explain_roughness_change(float old_roughness, float new_roughness) const {
+        std::cout << "\n=== Roughness Change Impact ===" << std::endl;
+        
+        float change = new_roughness - old_roughness;
+        if (std::abs(change) < 0.001f) {
+            std::cout << "No significant change in surface characteristics." << std::endl;
+            return;
+        }
+        
+        if (change > 0.0f) {
+            std::cout << "Surface becoming ROUGHER:" << std::endl;
+            std::cout << "• Specular highlights will become broader and softer" << std::endl;
+            std::cout << "• Reflections will become more diffused" << std::endl;
+            std::cout << "• Normal Distribution Function (D) will have wider spread" << std::endl;
+        } else {
+            std::cout << "Surface becoming SMOOTHER:" << std::endl;
+            std::cout << "• Specular highlights will become sharper and more concentrated" << std::endl;
+            std::cout << "• Reflections will become clearer and more mirror-like" << std::endl;
+            std::cout << "• Normal Distribution Function (D) will have narrower spread" << std::endl;
+        }
+        
+        // Transition analysis
+        if (old_roughness < 0.2f && new_roughness >= 0.2f) {
+            std::cout << "Material transition: Glossy → Semi-glossy" << std::endl;
+        } else if (old_roughness >= 0.2f && new_roughness < 0.2f) {
+            std::cout << "Material transition: Semi-glossy → Glossy" << std::endl;
+        } else if (old_roughness < 0.7f && new_roughness >= 0.7f) {
+            std::cout << "Material transition: Semi-glossy → Rough" << std::endl;
+        } else if (old_roughness >= 0.7f && new_roughness < 0.7f) {
+            std::cout << "Material transition: Rough → Semi-glossy" << std::endl;
+        }
+        
+        std::cout << "Expected visual change: " << (change > 0.0f ? "Softer highlights" : "Sharper highlights") << std::endl;
+    }
+
+    // Explain the impact of metallic changes on material appearance
+    void explain_metallic_change(float old_metallic, float new_metallic) const {
+        std::cout << "\n=== Metallic Change Impact ===" << std::endl;
+        
+        float change = new_metallic - old_metallic;
+        if (std::abs(change) < 0.001f) {
+            std::cout << "No significant change in material type." << std::endl;
+            return;
+        }
+        
+        if (change > 0.0f) {
+            std::cout << "Material becoming more METALLIC:" << std::endl;
+            std::cout << "• Fresnel reflectance (F0) shifting toward base color" << std::endl;
+            std::cout << "• Specular reflections becoming more colored" << std::endl;
+            std::cout << "• Diffuse contribution decreasing" << std::endl;
+            std::cout << "• Overall reflectance increasing" << std::endl;
+        } else {
+            std::cout << "Material becoming more DIELECTRIC:" << std::endl;
+            std::cout << "• Fresnel reflectance (F0) shifting toward ~0.04 (specular param)" << std::endl;
+            std::cout << "• Specular reflections becoming achromatic (white/gray)" << std::endl;
+            std::cout << "• Diffuse contribution increasing" << std::endl;
+            std::cout << "• Base color affecting transmitted light more" << std::endl;
+        }
+        
+        // Material type transition analysis
+        if (old_metallic < 0.5f && new_metallic >= 0.5f) {
+            std::cout << "Material type transition: Dielectric-dominant → Conductor-dominant" << std::endl;
+        } else if (old_metallic >= 0.5f && new_metallic < 0.5f) {
+            std::cout << "Material type transition: Conductor-dominant → Dielectric-dominant" << std::endl;
+        }
+        
+        std::cout << "Expected visual change: " << (change > 0.0f ? "More metallic appearance" : "More plastic/ceramic appearance") << std::endl;
+    }
+
+    // Explain the impact of base color changes on material appearance
+    void explain_color_change(const Vector3& old_color, const Vector3& new_color) const {
+        std::cout << "\n=== Base Color Change Impact ===" << std::endl;
+        
+        float color_distance = (new_color - old_color).length();
+        if (color_distance < 0.001f) {
+            std::cout << "No significant change in color appearance." << std::endl;
+            return;
+        }
+        
+        // Calculate luminance change
+        float old_luminance = 0.299f * old_color.x + 0.587f * old_color.y + 0.114f * old_color.z;
+        float new_luminance = 0.299f * new_color.x + 0.587f * new_color.y + 0.114f * new_color.z;
+        float luminance_change = new_luminance - old_luminance;
+        
+        std::cout << "Color characteristics change:" << std::endl;
+        std::cout << "• Luminance change: " << luminance_change << " (" << (luminance_change > 0 ? "brighter" : "darker") << ")" << std::endl;
+        
+        // Channel-specific analysis
+        std::cout << "• Red channel: " << old_color.x << " → " << new_color.x << std::endl;
+        std::cout << "• Green channel: " << old_color.y << " → " << new_color.y << std::endl;
+        std::cout << "• Blue channel: " << old_color.z << " → " << new_color.z << std::endl;
+        
+        // Material-specific impact based on metallic value
+        if (metallic > 0.5f) {
+            std::cout << "\nConductor material impact:" << std::endl;
+            std::cout << "• Specular reflections will change color significantly" << std::endl;
+            std::cout << "• F0 values directly affected by base color change" << std::endl;
+            std::cout << "• Overall reflectance characteristics modified" << std::endl;
+        } else {
+            std::cout << "\nDielectric material impact:" << std::endl;
+            std::cout << "• Diffuse/transmitted light color will change" << std::endl;
+            std::cout << "• Specular reflections remain largely achromatic" << std::endl;
+            std::cout << "• Subsurface appearance modified" << std::endl;
+        }
+        
+        std::cout << "Expected visual change: " << (luminance_change > 0.1f ? "Significantly brighter appearance" :
+                                                     luminance_change < -0.1f ? "Significantly darker appearance" :
+                                                     "Color shift with similar brightness") << std::endl;
+    }
     // Convert roughness parameter to alpha for mathematical calculations
     // Alpha parameterization: α = roughness² provides more intuitive user control
     // Reasoning: linear roughness feels more natural than quadratic alpha
