@@ -13,6 +13,7 @@
 #include "core/image.hpp"
 #include "core/performance_timer.hpp"
 #include "core/progress_reporter.hpp"
+#include "core/logger.hpp"
 #include "ui/material_editor.hpp"
 #include "ui/scene_manager.hpp"
 #include "ui/parameter_validator.hpp"
@@ -90,7 +91,8 @@ int main(int argc, char* argv[]) {
     float specular_param = 0.04f;          // Typical dielectric F0
     
     // Debug and verbosity control parameters
-    bool quiet_mode = false;               // Minimal output mode
+    // Default to Verbose for educational mode (can be changed with --quiet or --verbose)
+    Logger::set_level(VerbosityLevel::Verbose);
     bool interactive_mode = false;         // Interactive Cook-Torrance editor mode (Story 3.3)
     
     for (int i = 1; i < argc; i++) {
@@ -131,7 +133,7 @@ int main(int argc, char* argv[]) {
                 use_scene_file = false;  // Force single sphere mode - scene files don't support Cook-Torrance
                 image_resolution = Resolution::parse_from_string("1024x1024");
                 material_type = "cook-torrance";
-                quiet_mode = false;  // Keep educational output
+                Logger::set_level(VerbosityLevel::Verbose);  // Keep educational output
                 std::cout << "Cook-Torrance Demo preset: 1024x1024, single sphere with Cook-Torrance material" << std::endl;
                 std::cout << "NOTE: Scene files do not support Cook-Torrance materials - using single sphere mode" << std::endl;
             } else if (preset == "performance") {
@@ -157,7 +159,7 @@ int main(int argc, char* argv[]) {
             use_scene_file = false;  // Force single sphere mode - scene files don't support Cook-Torrance
             image_resolution = Resolution::parse_from_string("1024x1024");
             material_type = "cook-torrance";
-            quiet_mode = false;
+            Logger::set_level(VerbosityLevel::Verbose);
             std::cout << "Using preset: cook-torrance" << std::endl;
             std::cout << "Cook-Torrance Demo preset: 1024x1024, single sphere with Cook-Torrance material" << std::endl;
             std::cout << "NOTE: Scene files do not support Cook-Torrance materials - using single sphere mode" << std::endl;
@@ -196,15 +198,15 @@ int main(int argc, char* argv[]) {
             std::cout << "Specular override: " << specular_param << std::endl;
             i++;  // Skip next argument since we consumed it
         } else if (std::strcmp(argv[i], "--quiet") == 0) {
-            quiet_mode = true;
+            Logger::set_level(VerbosityLevel::Normal);
             std::cout << "Quiet mode enabled - minimal output" << std::endl;
         } else if (std::strcmp(argv[i], "--verbose") == 0) {
-            quiet_mode = false;
+            Logger::set_level(VerbosityLevel::Verbose);
             std::cout << "Verbose mode enabled - full educational output" << std::endl;
         } else if (std::strcmp(argv[i], "--interactive") == 0) {
             interactive_mode = true;
             material_type = "cook-torrance";  // Force Cook-Torrance for interactive mode
-            quiet_mode = true;  // Default to quiet mode for better interactivity
+            Logger::set_level(VerbosityLevel::Normal);  // Default to normal mode for better interactivity
             if (!scene_explicitly_set) {
                 use_scene_file = false;  // Default to single-sphere mode for interactive
             }
@@ -732,7 +734,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Selected material type: " << material_type << std::endl;
         
         if (material_type == "cook-torrance") {
-            if (!quiet_mode) {
+            if (Logger::is_verbose()) {
                 std::cout << "\n=== Cook-Torrance Material Configuration ===" << std::endl;
                 std::cout << "Base Color: (0.7, 0.3, 0.3) - Reddish surface" << std::endl;
                 std::cout << "Roughness: " << roughness_param << std::endl;
@@ -743,9 +745,9 @@ int main(int argc, char* argv[]) {
             if (interactive_mode) {
                 // For interactive mode, create Cook-Torrance sphere in Scene system
                 std::cout << "Creating Cook-Torrance sphere in Scene system for interactive mode" << std::endl;
-                auto default_cook_material = std::make_unique<CookTorranceMaterial>(Vector3(0.7f, 0.3f, 0.3f), roughness_param, metallic_param, specular_param, !quiet_mode);
+                auto default_cook_material = std::make_unique<CookTorranceMaterial>(Vector3(0.7f, 0.3f, 0.3f), roughness_param, metallic_param, specular_param, Logger::is_verbose());
                 int material_idx = render_scene.add_material(std::move(default_cook_material));
-                Sphere default_sphere(Point3(0, 0, -3), 1.0f, material_idx, !quiet_mode);
+                Sphere default_sphere(Point3(0, 0, -3), 1.0f, material_idx, Logger::is_verbose());
                 render_scene.add_sphere(default_sphere);
                 
                 // Add multiple point lights for better metallic illumination
@@ -760,14 +762,14 @@ int main(int argc, char* argv[]) {
                 render_scene.print_scene_statistics();
             } else {
                 // Non-interactive mode: use original Cook-Torrance rendering path (bypassing Scene system)
-                if (!quiet_mode) {
+                if (Logger::is_verbose()) {
                     std::cout << "\nUsing Cook-Torrance rendering path (bypassing Scene system)" << std::endl;
                 }
             }
         } else {
             // Use Scene system for Lambert materials
             int material_idx = render_scene.add_material(std::make_unique<LambertMaterial>(Vector3(0.7f, 0.3f, 0.3f)));
-            Sphere default_sphere(Point3(0, 0, -3), 1.0f, material_idx, !quiet_mode);
+            Sphere default_sphere(Point3(0, 0, -3), 1.0f, material_idx, Logger::is_verbose());
             render_scene.add_sphere(default_sphere);
             
             // Add the point light to the scene for proper lighting
@@ -795,7 +797,7 @@ int main(int argc, char* argv[]) {
     
     // Initialize main progress reporter for legacy compatibility
     int total_pixels = image_width * image_height;
-    ProgressReporter progress_reporter(total_pixels, &performance_timer, quiet_mode);
+    ProgressReporter progress_reporter(total_pixels, &performance_timer, Logger::is_quiet());
     
     // Abstract the main rendering logic into a reusable function
     auto render_image = [&](int width, int height, bool use_scene_materials = true) -> Image {
@@ -806,7 +808,7 @@ int main(int argc, char* argv[]) {
         
         // Initialize comprehensive progress reporting (Story 2.4 AC: 4)
         int local_total_pixels = width * height;
-        ProgressReporter local_progress_reporter(local_total_pixels, &performance_timer, quiet_mode);
+        ProgressReporter local_progress_reporter(local_total_pixels, &performance_timer, Logger::is_quiet());
         
         // Performance counters for this render
         int local_rays_generated = 0;
@@ -835,7 +837,7 @@ int main(int argc, char* argv[]) {
                 if (use_scene_materials) {
                     // Scene-based rendering path (use loaded scene)
                     performance_timer.start_phase(PerformanceTimer::INTERSECTION_TESTING);
-                    Scene::Intersection intersection = render_scene.intersect(pixel_ray, !quiet_mode);
+                    Scene::Intersection intersection = render_scene.intersect(pixel_ray, Logger::is_verbose());
                     performance_timer.end_phase(PerformanceTimer::INTERSECTION_TESTING);
                     performance_timer.increment_counter(PerformanceTimer::INTERSECTION_TESTING);
                     local_intersection_tests++;
@@ -859,8 +861,8 @@ int main(int argc, char* argv[]) {
                             Vector3 incident_irradiance = image_light.illuminate(surface_point, temp_light_dir, temp_distance);
                             
                             pixel_color = intersection.material->scatter_light(
-                                light_direction, view_direction, intersection.normal, 
-                                incident_irradiance, !quiet_mode
+                                light_direction, view_direction, intersection.normal,
+                                incident_irradiance, Logger::is_verbose()
                             );
                         } else {
                             // Multi-light accumulation from scene
@@ -881,7 +883,7 @@ int main(int argc, char* argv[]) {
                             }
                             
                             // Educational output for multi-light (if enabled and first few pixels)
-                            if (!quiet_mode && (x + y * width) < 5) {
+                            if (Logger::is_verbose() && (x + y * width) < 5) {
                                 std::cout << "\n=== Multi-Light Accumulation (Pixel " << (x + y * width) << ") ===" << std::endl;
                                 std::cout << "Scene lights: " << render_scene.lights.size() << std::endl;
                                 std::cout << "Final accumulated color: (" << pixel_color.x << ", " << pixel_color.y << ", " << pixel_color.z << ")" << std::endl;
@@ -901,8 +903,8 @@ int main(int argc, char* argv[]) {
                     // Direct sphere intersection (single sphere at (0,0,-3) with radius 1.0)
                     Point3 sphere_center(0, 0, -3);
                     float sphere_radius = 1.0f;
-                    Sphere cook_torrance_sphere(sphere_center, sphere_radius, 0, !quiet_mode);
-                    Sphere::Intersection sphere_hit = cook_torrance_sphere.intersect(pixel_ray, !quiet_mode);
+                    Sphere cook_torrance_sphere(sphere_center, sphere_radius, 0, Logger::is_verbose());
+                    Sphere::Intersection sphere_hit = cook_torrance_sphere.intersect(pixel_ray, Logger::is_verbose());
                     
                     performance_timer.end_phase(PerformanceTimer::INTERSECTION_TESTING);
                     performance_timer.increment_counter(PerformanceTimer::INTERSECTION_TESTING);
@@ -915,7 +917,7 @@ int main(int argc, char* argv[]) {
                         
                         // Create Cook-Torrance material using command-line base_color
                         Vector3 base_color(0.7f, 0.3f, 0.3f);  // Default base color, should be configurable in future
-                        CookTorranceMaterial cook_torrance_material(base_color, roughness_param, metallic_param, specular_param, !quiet_mode);
+                        CookTorranceMaterial cook_torrance_material(base_color, roughness_param, metallic_param, specular_param, Logger::is_verbose());
                         
                         // Multi-light accumulation for Cook-Torrance (AC2 - Story 3.2)
                         pixel_color = Vector3(0, 0, 0);  // Initialize accumulator
@@ -931,8 +933,8 @@ int main(int argc, char* argv[]) {
                             Vector3 incident_irradiance = image_light.illuminate(surface_point, temp_light_dir, temp_distance);
                             
                             pixel_color = cook_torrance_material.scatter_light(
-                                light_direction, view_direction, sphere_hit.normal, 
-                                incident_irradiance, !quiet_mode
+                                light_direction, view_direction, sphere_hit.normal,
+                                incident_irradiance, Logger::is_verbose()
                             );
                         } else {
                             // Multi-light accumulation from scene for Cook-Torrance
@@ -953,7 +955,7 @@ int main(int argc, char* argv[]) {
                             }
                             
                             // Educational output for multi-light Cook-Torrance (if enabled and first few pixels)
-                            if (!quiet_mode && (x + y * width) < 3) {
+                            if (Logger::is_verbose() && (x + y * width) < 3) {
                                 std::cout << "\n=== Cook-Torrance Multi-Light Accumulation (Pixel " << (x + y * width) << ") ===" << std::endl;
                                 std::cout << "Scene lights: " << render_scene.lights.size() << std::endl;
                                 std::cout << "Final accumulated color: (" << pixel_color.x << ", " << pixel_color.y << ", " << pixel_color.z << ")" << std::endl;
