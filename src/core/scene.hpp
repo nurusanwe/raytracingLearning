@@ -232,12 +232,7 @@ public:
         return material_index;
     }
 
-    // Legacy add_material method for backward compatibility with existing Lambert code
-    // Wraps Lambert material in unique_ptr and delegates to polymorphic method
-    int add_material(const LambertMaterial& material) {
-        auto lambert_material = std::make_unique<LambertMaterial>(material);
-        return add_material(std::move(lambert_material));
-    }
+    // Note: Legacy add_material(const LambertMaterial&) removed - use add_material(std::make_unique<LambertMaterial>(...)) instead
 
     // Add polymorphic light to scene and return its index
     // Educational transparency: reports light assignment and validates parameters

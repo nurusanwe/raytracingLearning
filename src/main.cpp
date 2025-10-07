@@ -381,13 +381,9 @@ int main(int argc, char* argv[]) {
     Scene test_scene;
     
     // Add materials to scene
-    LambertMaterial red_material(Vector3(0.7f, 0.3f, 0.3f));
-    LambertMaterial blue_material(Vector3(0.3f, 0.3f, 0.7f));
-    LambertMaterial green_material(Vector3(0.3f, 0.7f, 0.3f));
-    
-    int red_mat_idx = test_scene.add_material(red_material);
-    int blue_mat_idx = test_scene.add_material(blue_material);
-    int green_mat_idx = test_scene.add_material(green_material);
+    int red_mat_idx = test_scene.add_material(std::make_unique<LambertMaterial>(Vector3(0.7f, 0.3f, 0.3f)));
+    int blue_mat_idx = test_scene.add_material(std::make_unique<LambertMaterial>(Vector3(0.3f, 0.3f, 0.7f)));
+    int green_mat_idx = test_scene.add_material(std::make_unique<LambertMaterial>(Vector3(0.3f, 0.7f, 0.3f)));
     
     // Add spheres to scene (using new constructor with material index)
     Sphere sphere1(Point3(0.0f, 0.0f, -5.0f), 1.0f, red_mat_idx);     // Central red sphere
@@ -770,8 +766,7 @@ int main(int argc, char* argv[]) {
             }
         } else {
             // Use Scene system for Lambert materials
-            LambertMaterial default_material(Vector3(0.7f, 0.3f, 0.3f));  // Reddish diffuse
-            int material_idx = render_scene.add_material(default_material);
+            int material_idx = render_scene.add_material(std::make_unique<LambertMaterial>(Vector3(0.7f, 0.3f, 0.3f)));
             Sphere default_sphere(Point3(0, 0, -3), 1.0f, material_idx, !quiet_mode);
             render_scene.add_sphere(default_sphere);
             
@@ -1155,7 +1150,7 @@ int main(int argc, char* argv[]) {
         
         // Create initial Cook-Torrance material for interactive editing
         Vector3 initial_color(0.7f, 0.3f, 0.3f);
-        CookTorranceMaterial* interactive_material = new CookTorranceMaterial(initial_color, roughness_param, metallic_param, specular_param, false);
+        auto interactive_material = std::make_unique<CookTorranceMaterial>(initial_color, roughness_param, metallic_param, specular_param, false);
         
         // Initialize current scene name for tracking
         std::string current_scene_name = use_scene_file ? std::filesystem::path(scene_filename).stem().string() : "single-sphere";
@@ -1203,7 +1198,7 @@ int main(int argc, char* argv[]) {
                     
                     std::cout << "\n=== Material Parameter Adjustment ===" << std::endl;
                     auto param_start = std::chrono::steady_clock::now();
-                    bool params_changed = MaterialEditor::get_user_parameter_input(interactive_material);
+                    bool params_changed = MaterialEditor::get_user_parameter_input(interactive_material.get());
                     auto param_end = std::chrono::steady_clock::now();
                     auto param_duration = std::chrono::duration_cast<std::chrono::milliseconds>(param_end - param_start);
                     std::cout << "Parameter update time: " << param_duration.count() << " ms" << std::endl;
@@ -1233,7 +1228,7 @@ int main(int argc, char* argv[]) {
                     }
                     
                     std::cout << "\n=== Material Preset Loading ===" << std::endl;
-                    if (PresetManager::select_and_apply_preset(interactive_material)) {
+                    if (PresetManager::select_and_apply_preset(interactive_material.get())) {
                         std::cout << "Preset applied successfully!" << std::endl;
                         std::cout << "Use option 5 to render with the preset material." << std::endl;
                     }
@@ -1322,9 +1317,8 @@ int main(int argc, char* argv[]) {
             }
         }
         
-        // Cleanup interactive material
-        delete interactive_material;
-        
+        // Cleanup interactive material (automatic via unique_ptr destructor)
+
         std::cout << "\n=== Interactive Session Complete ===" << std::endl;
         std::cout << "Thank you for using the Cook-Torrance Interactive Material Editor!" << std::endl;
         std::cout << "All parameter changes and renders have been preserved." << std::endl;
