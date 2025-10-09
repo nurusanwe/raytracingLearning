@@ -2100,7 +2100,7 @@ sphere 0 0 0 -1.0 nonexistent_material  # Negative radius, invalid material
         // Test 1: Lambert BRDF evaluation through polymorphic interface
         std::cout << "Test 1: Lambert BRDF polymorphic evaluation..." << std::endl;
         Material* lambert_ptr = new LambertMaterial(Vector3(0.7f, 0.7f, 0.7f));
-        Vector3 lambert_brdf = lambert_ptr->evaluate_brdf(incident_dir, outgoing_dir, surface_normal, false);
+        Vector3 lambert_brdf = lambert_ptr->evaluate_brdf(incident_dir, outgoing_dir, surface_normal);
         
         // Lambert BRDF should be constant: base_color / π
         float expected_lambert = 0.7f / M_PI;
@@ -2114,7 +2114,7 @@ sphere 0 0 0 -1.0 nonexistent_material  # Negative radius, invalid material
         // Test 2: Cook-Torrance BRDF evaluation through polymorphic interface
         std::cout << "Test 2: Cook-Torrance BRDF polymorphic evaluation..." << std::endl;
         Material* ct_ptr = new CookTorranceMaterial(Vector3(0.8f, 0.8f, 0.8f), 0.3f, 0.0f, 0.04f);
-        Vector3 ct_brdf = ct_ptr->evaluate_brdf(incident_dir, outgoing_dir, surface_normal, false);
+        Vector3 ct_brdf = ct_ptr->evaluate_brdf(incident_dir, outgoing_dir, surface_normal);
         
         // Cook-Torrance should give different result than Lambert
         assert(std::abs(ct_brdf.x - lambert_brdf.x) > 1e-6);  // Should be noticeably different
@@ -2196,7 +2196,7 @@ sphere 2.0 0.0 -5.0 1.0 legacy_green
         
         // Test intersection with multi-material scene
         Ray test_ray(Point3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, -1.0f));
-        Scene::Intersection hit = scene.intersect(test_ray, false);
+        Scene::Intersection hit = scene.intersect(test_ray);
         
         assert(hit.hit);
         assert(hit.material != nullptr);
@@ -2234,13 +2234,13 @@ sphere 2.0 0.0 -5.0 1.0 legacy_green
         
         // Test intersection and BRDF evaluation integration
         Ray lambert_ray(Point3(-1.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, -1.0f));
-        Scene::Intersection lambert_hit = scene.intersect(lambert_ray, false);
+        Scene::Intersection lambert_hit = scene.intersect(lambert_ray);
         
         assert(lambert_hit.hit);
         assert(lambert_hit.material->type == MaterialType::Lambert);
         
         Ray ct_ray(Point3(1.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, -1.0f));
-        Scene::Intersection ct_hit = scene.intersect(ct_ray, false);
+        Scene::Intersection ct_hit = scene.intersect(ct_ray);
         
         assert(ct_hit.hit);
         assert(ct_hit.material->type == MaterialType::CookTorrance);
@@ -2249,8 +2249,8 @@ sphere 2.0 0.0 -5.0 1.0 legacy_green
         Vector3 incident = Vector3(0.0f, 0.707f, -0.707f).normalize();
         Vector3 outgoing = Vector3(0.0f, 0.0f, 1.0f);
         
-        Vector3 lambert_brdf = lambert_hit.material->evaluate_brdf(incident, outgoing, lambert_hit.normal, false);
-        Vector3 ct_brdf = ct_hit.material->evaluate_brdf(incident, outgoing, ct_hit.normal, false);
+        Vector3 lambert_brdf = lambert_hit.material->evaluate_brdf(incident, outgoing, lambert_hit.normal);
+        Vector3 ct_brdf = ct_hit.material->evaluate_brdf(incident, outgoing, ct_hit.normal);
         
         // Validate BRDF results are reasonable
         assert(lambert_brdf.x >= 0 && lambert_brdf.y >= 0 && lambert_brdf.z >= 0);
@@ -2266,8 +2266,8 @@ sphere 2.0 0.0 -5.0 1.0 legacy_green
         Vector3 view_dir = outgoing;
         Vector3 incident_radiance(1.0f, 1.0f, 1.0f);
         
-        Vector3 lambert_scattered = lambert_hit.material->scatter_light(incident_light, view_dir, lambert_hit.normal, incident_radiance, false);
-        Vector3 ct_scattered = ct_hit.material->scatter_light(incident_light, view_dir, ct_hit.normal, incident_radiance, false);
+        Vector3 lambert_scattered = lambert_hit.material->scatter_light(incident_light, view_dir, lambert_hit.normal, incident_radiance);
+        Vector3 ct_scattered = ct_hit.material->scatter_light(incident_light, view_dir, ct_hit.normal, incident_radiance);
         
         assert(lambert_scattered.x >= 0 && ct_scattered.x >= 0);
         assert(std::isfinite(lambert_scattered.x) && std::isfinite(ct_scattered.x));

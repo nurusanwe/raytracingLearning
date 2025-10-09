@@ -44,7 +44,7 @@ public:
         Ray shadow_ray(Point3(offset_point.x, offset_point.y, offset_point.z), light_direction);
         
         // Test intersection with scene - for directional lights, any intersection blocks the light
-        Scene::Intersection hit = scene.intersect(shadow_ray, false);  // Disable verbose output
+        Scene::Intersection hit = scene.intersect(shadow_ray);
         
         // Any intersection along the ray blocks the directional light
         return hit.hit && hit.t > epsilon;

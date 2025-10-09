@@ -1,5 +1,6 @@
 #pragma once
 #include "../core/vector3.hpp"
+#include "../core/logger.hpp"
 #include <iostream>
 #include <algorithm>
 
@@ -42,8 +43,7 @@ public:
     //   wi: incident light direction (pointing toward surface, normalized)
     //   wo: outgoing view direction (pointing toward camera, normalized)
     //   normal: surface normal at intersection point (outward-pointing, normalized)
-    //   verbose: enable educational mathematical breakdown output
-    virtual Vector3 evaluate_brdf(const Vector3& wi, const Vector3& wo, const Vector3& normal, bool verbose = true) const = 0;
+    virtual Vector3 evaluate_brdf(const Vector3& wi, const Vector3& wo, const Vector3& normal) const = 0;
     
     // Pure virtual parameter validation - implemented by concrete material classes
     // Each material type defines its own physically valid parameter ranges:
@@ -81,28 +81,27 @@ public:
     // view_direction: direction from surface to camera (normalized)
     // normal: surface normal at intersection point (outward-pointing, normalized)
     // incident_radiance: incoming light energy (L_i in rendering equation)
-    // verbose: enable educational console output
-    virtual Vector3 scatter_light(const Vector3& light_direction, const Vector3& view_direction, 
-                                 const Vector3& normal, const Vector3& incident_radiance, bool verbose = true) const {
-        if (verbose) {
+    virtual Vector3 scatter_light(const Vector3& light_direction, const Vector3& view_direction,
+                                 const Vector3& normal, const Vector3& incident_radiance) const {
+        if (Logger::is_verbose()) {
             std::cout << "\n=== Generic Material Light Scattering ===" << std::endl;
             std::cout << "Material Type: " << material_type_name() << std::endl;
         }
         
         // Calculate cosine term: n·l (normal dot light_direction)
         float cos_theta = normal.dot(light_direction);
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "Raw cosine term n·l = " << cos_theta << std::endl;
         }
         
         // Clamp to positive values: surfaces don't emit light when facing away
         cos_theta = std::max(0.0f, cos_theta);
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "Clamped cosine term max(0, n·l) = " << cos_theta << std::endl;
         }
         
         // Evaluate material-specific BRDF
-        Vector3 brdf = evaluate_brdf(light_direction, view_direction, normal, verbose);
+        Vector3 brdf = evaluate_brdf(light_direction, view_direction, normal);
         
         // Full rendering equation evaluation: L_o = f_r * L_i * cos(θ)
         Vector3 outgoing_radiance = Vector3(
@@ -111,7 +110,7 @@ public:
             brdf.z * incident_radiance.z * cos_theta   // Blue channel
         );
         
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "Final outgoing radiance: L_o = f_r * L_i * cos(θ) = (" 
                       << outgoing_radiance.x << ", " << outgoing_radiance.y << ", " << outgoing_radiance.z << ")" << std::endl;
             std::cout << "=== Generic light scattering calculation complete ===" << std::endl;

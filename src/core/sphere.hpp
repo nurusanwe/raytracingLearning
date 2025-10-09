@@ -2,6 +2,7 @@
 #include "point3.hpp"
 #include "vector3.hpp"
 #include "ray.hpp"
+#include "logger.hpp"
 #include <cmath>
 #include <iostream>
 
@@ -18,9 +19,9 @@ public:
     // Constructor with explicit center point, radius, and material index
     // Geometric interpretation: defines sphere as locus of points at radius distance from center
     // Material reference: enables material property lookup in Scene's materials container
-    Sphere(const Point3& center, float radius, int material_idx, bool verbose = false) 
+    Sphere(const Point3& center, float radius, int material_idx)
         : center(center), radius(radius), material_index(material_idx) {
-        validate_and_clamp_parameters(verbose);
+        validate_and_clamp_parameters();
     }
 
     // Intersection result structure containing all intersection information
@@ -102,8 +103,8 @@ public:
     //
     // Reference: "Real-Time Rendering" by Akenine-Möller et al. (4th ed.)
     //           "Ray Tracing Gems" edited by Haines & Shirley (2019)
-    Intersection intersect(const Ray& ray, bool verbose = true) const {
-        if (verbose) {
+    Intersection intersect(const Ray& ray) const {
+        if (Logger::is_verbose()) {
             std::cout << "\n=== Ray-Sphere Intersection Calculation ===" << std::endl;
             std::cout << "Ray origin: (" << ray.origin.x << ", " << ray.origin.y << ", " << ray.origin.z << ")" << std::endl;
             std::cout << "Ray direction: (" << ray.direction.x << ", " << ray.direction.y << ", " << ray.direction.z << ")" << std::endl;
@@ -115,7 +116,7 @@ public:
         // Vector from ray origin to sphere center
         // Geometric interpretation: displacement needed to go from ray start to sphere center
         Vector3 oc = ray.origin - center;
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "Origin-to-center vector (oc): (" << oc.x << ", " << oc.y << ", " << oc.z << ")" << std::endl;
         }
 
@@ -127,21 +128,21 @@ public:
         // Coefficient 'a': D·D (direction vector dot product with itself)
         // Geometric interpretation: squared length of direction vector
         float a = ray.direction.dot(ray.direction);
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "Quadratic coefficient a = D·D = " << a << std::endl;
         }
         
         // Coefficient 'b': 2(OC·D) (twice the projection of oc onto direction)
         // Geometric interpretation: how much origin-center vector aligns with ray direction
         float b = 2.0f * oc.dot(ray.direction);
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "Quadratic coefficient b = 2(OC·D) = " << b << std::endl;
         }
         
         // Coefficient 'c': OC·OC - r² (squared distance from origin to center minus squared radius)
         // Geometric interpretation: how far ray origin is from sphere surface
         float c = oc.dot(oc) - radius * radius;
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "Quadratic coefficient c = OC·OC - r² = " << c << std::endl;
         }
 
@@ -150,13 +151,13 @@ public:
         // Δ = 0: one intersection (ray tangent to sphere)  
         // Δ < 0: no intersection (ray misses sphere)
         float discriminant = b * b - 4 * a * c;
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "Discriminant Δ = b² - 4ac = " << discriminant << std::endl;
         }
 
         // No intersection if discriminant is negative
         if (discriminant < 0) {
-            if (verbose) {
+            if (Logger::is_verbose()) {
                 std::cout << "No intersection: discriminant < 0 (ray misses sphere)" << std::endl;
             }
             return Intersection();  // Default constructor creates hit=false
@@ -165,13 +166,13 @@ public:
         // Calculate both intersection points using quadratic formula
         // t = (-b ± √Δ) / 2a
         float sqrt_discriminant = std::sqrt(discriminant);
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "Square root of discriminant: √Δ = " << sqrt_discriminant << std::endl;
         }
         
         float t1 = (-b - sqrt_discriminant) / (2 * a);  // Near intersection
         float t2 = (-b + sqrt_discriminant) / (2 * a);  // Far intersection
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "Intersection parameters: t1 = " << t1 << ", t2 = " << t2 << std::endl;
         }
 
@@ -180,16 +181,16 @@ public:
         float t_hit;
         if (t1 > 1e-6f) {  // Use small epsilon to avoid self-intersection
             t_hit = t1;    // Closer intersection is valid
-            if (verbose) {
+            if (Logger::is_verbose()) {
                 std::cout << "Using closer intersection t1 = " << t_hit << std::endl;
             }
         } else if (t2 > 1e-6f) {
             t_hit = t2;    // Only far intersection is valid (ray starts inside sphere)
-            if (verbose) {
+            if (Logger::is_verbose()) {
                 std::cout << "Using farther intersection t2 = " << t_hit << " (ray starts inside sphere)" << std::endl;
             }
         } else {
-            if (verbose) {
+            if (Logger::is_verbose()) {
                 std::cout << "No valid intersection: both t values ≤ 0 (intersections behind ray origin)" << std::endl;
             }
             return Intersection();  // Both intersections behind ray origin
@@ -197,7 +198,7 @@ public:
 
         // Calculate intersection point using ray equation P(t) = O + t*D
         Point3 hit_point = ray.at(t_hit);
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "Intersection point: (" << hit_point.x << ", " << hit_point.y << ", " << hit_point.z << ")" << std::endl;
         }
 
@@ -205,7 +206,7 @@ public:
         // Normal points outward from sphere center to surface point
         // Formula: N = (P - C) / |P - C| where P=intersection point, C=center
         Vector3 normal = (hit_point - center).normalize();
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "Surface normal: (" << normal.x << ", " << normal.y << ", " << normal.z << ")" << std::endl;
             
             // Verify normal is unit length
@@ -275,8 +276,8 @@ public:
     
     // Parameter validation and clamping for robust sphere construction
     // Ensures sphere parameters are within valid mathematical ranges
-    void validate_and_clamp_parameters(bool verbose = false) {
-        if (verbose) {
+    void validate_and_clamp_parameters() {
+        if (Logger::is_verbose()) {
             std::cout << "\n=== Sphere Parameter Validation ===" << std::endl;
             std::cout << "Original parameters:" << std::endl;
             std::cout << "  Center: (" << center.x << ", " << center.y << ", " << center.z << ")" << std::endl;
@@ -286,7 +287,7 @@ public:
         
         // Validate and fix center coordinates
         if (!std::isfinite(center.x) || !std::isfinite(center.y) || !std::isfinite(center.z)) {
-            if (verbose) {
+            if (Logger::is_verbose()) {
                 std::cout << "WARNING: Invalid sphere center coordinates, setting to origin" << std::endl;
             }
             center = Point3(0, 0, 0);
@@ -294,17 +295,17 @@ public:
         
         // Validate and clamp radius
         if (radius <= 0.0f) {
-            if (verbose) {
+            if (Logger::is_verbose()) {
                 std::cout << "WARNING: Invalid sphere radius " << radius << ", clamping to 0.1" << std::endl;
             }
             radius = 0.1f;
         } else if (radius > 1000.0f) {
-            if (verbose) {
+            if (Logger::is_verbose()) {
                 std::cout << "WARNING: Very large sphere radius " << radius << ", clamping to 1000.0" << std::endl;
             }
             radius = 1000.0f;
         } else if (!std::isfinite(radius)) {
-            if (verbose) {
+            if (Logger::is_verbose()) {
                 std::cout << "WARNING: Non-finite sphere radius, setting to 1.0" << std::endl;
             }
             radius = 1.0f;
@@ -312,13 +313,13 @@ public:
         
         // Validate material index (cannot fix here as we don't know scene materials)
         if (material_index < 0) {
-            if (verbose) {
+            if (Logger::is_verbose()) {
                 std::cout << "WARNING: Negative material index " << material_index << ", setting to 0" << std::endl;
             }
             material_index = 0;
         }
         
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "Validated parameters:" << std::endl;
             std::cout << "  Center: (" << center.x << ", " << center.y << ", " << center.z << ")" << std::endl;
             std::cout << "  Radius: " << radius << std::endl;

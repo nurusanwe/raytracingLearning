@@ -46,7 +46,7 @@ public:
         Ray shadow_ray(Point3(offset_point.x, offset_point.y, offset_point.z), light_direction);
         
         // Test intersection with scene
-        Scene::Intersection hit = scene.intersect(shadow_ray, false);  // Disable verbose output for shadow rays
+        Scene::Intersection hit = scene.intersect(shadow_ray);
         
         // Check if intersection occurs before reaching the light
         return hit.hit && hit.t < (distance - epsilon);
