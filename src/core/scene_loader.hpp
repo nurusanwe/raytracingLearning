@@ -230,7 +230,7 @@ private:
         std::cout << "  Roughness: " << roughness << ", Metallic: " << metallic << ", Specular: " << specular << std::endl;
         
         // Create Cook-Torrance material with validation
-        auto material = std::make_unique<CookTorranceMaterial>(Vector3(r, g, b), roughness, metallic, specular, true);
+        auto material = std::make_unique<CookTorranceMaterial>(Vector3(r, g, b), roughness, metallic, specular);
         
         // Educational parameter validation with detailed output
         if (!material->validate_parameters()) {

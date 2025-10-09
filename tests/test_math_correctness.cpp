@@ -1350,13 +1350,11 @@ namespace MathematicalTests {
         
         // Test Case 2: Material addition
         std::cout << "Test 2: Material addition..." << std::endl;
-        LambertMaterial red_material(Vector3(0.7f, 0.3f, 0.3f));
-        int red_idx = empty_scene.add_material(red_material);
+        int red_idx = empty_scene.add_material(std::make_unique<LambertMaterial>(Vector3(0.7f, 0.3f, 0.3f)));
         assert(red_idx == 0);  // First material should have index 0
         assert(empty_scene.materials.size() == 1);
-        
-        LambertMaterial blue_material(Vector3(0.3f, 0.3f, 0.7f));
-        int blue_idx = empty_scene.add_material(blue_material);
+
+        int blue_idx = empty_scene.add_material(std::make_unique<LambertMaterial>(Vector3(0.3f, 0.3f, 0.7f)));
         assert(blue_idx == 1);  // Second material should have index 1
         assert(empty_scene.materials.size() == 2);
         
@@ -1390,13 +1388,9 @@ namespace MathematicalTests {
         Scene test_scene;
         
         // Add materials
-        LambertMaterial red_mat(Vector3(0.7f, 0.3f, 0.3f));
-        LambertMaterial green_mat(Vector3(0.3f, 0.7f, 0.3f));
-        LambertMaterial blue_mat(Vector3(0.3f, 0.3f, 0.7f));
-        
-        int red_idx = test_scene.add_material(red_mat);
-        int green_idx = test_scene.add_material(green_mat);
-        int blue_idx = test_scene.add_material(blue_mat);
+        int red_idx = test_scene.add_material(std::make_unique<LambertMaterial>(Vector3(0.7f, 0.3f, 0.3f)));
+        int green_idx = test_scene.add_material(std::make_unique<LambertMaterial>(Vector3(0.3f, 0.7f, 0.3f)));
+        int blue_idx = test_scene.add_material(std::make_unique<LambertMaterial>(Vector3(0.3f, 0.3f, 0.7f)));
         
         // Add spheres at different depths
         Sphere near_sphere(Point3(0, 0, -4), 0.5f, green_idx);   // Closest (z=-3.5 front surface)
@@ -1537,8 +1531,7 @@ sphere 0 0 0 -1.0 nonexistent_material  # Negative radius, invalid material
         Scene perf_scene;
         
         // Add materials and spheres
-        LambertMaterial test_material(Vector3(0.5f, 0.5f, 0.5f));
-        int mat_idx = perf_scene.add_material(test_material);
+        int mat_idx = perf_scene.add_material(std::make_unique<LambertMaterial>(Vector3(0.5f, 0.5f, 0.5f)));
         
         // Add multiple spheres for performance testing
         for (int i = 0; i < 5; i++) {
@@ -1590,9 +1583,8 @@ sphere 0 0 0 -1.0 nonexistent_material  # Negative radius, invalid material
         // Test Case 1: Scene with invalid spheres
         std::cout << "Test 1: Invalid sphere rejection..." << std::endl;
         Scene validation_scene;
-        
-        LambertMaterial valid_material(Vector3(0.5f, 0.5f, 0.5f));
-        int mat_idx = validation_scene.add_material(valid_material);
+
+        int mat_idx = validation_scene.add_material(std::make_unique<LambertMaterial>(Vector3(0.5f, 0.5f, 0.5f)));
         
         // Try to add sphere with negative radius
         Sphere invalid_sphere(Point3(0, 0, -5), 1.0f, mat_idx);  // Valid construction
@@ -1620,8 +1612,8 @@ sphere 0 0 0 -1.0 nonexistent_material  # Negative radius, invalid material
         
         // Scene should accept materials regardless of energy conservation for educational purposes
         // but warn about violations
-        int valid_energy_idx = energy_scene.add_material(valid_energy_material);
-        int invalid_energy_idx = energy_scene.add_material(invalid_energy_material);
+        int valid_energy_idx = energy_scene.add_material(std::make_unique<LambertMaterial>(valid_energy_material));
+        int invalid_energy_idx = energy_scene.add_material(std::make_unique<LambertMaterial>(invalid_energy_material));
         assert(valid_energy_idx >= 0);
         assert(invalid_energy_idx >= 0);
         assert(energy_scene.materials.size() == 2);
@@ -1638,8 +1630,7 @@ sphere 0 0 0 -1.0 nonexistent_material  # Negative radius, invalid material
         // Test Case 4: Self-intersection avoidance
         std::cout << "Test 4: Self-intersection avoidance..." << std::endl;
         Scene self_test_scene;
-        LambertMaterial self_material(Vector3(0.5f, 0.5f, 0.5f));
-        int self_mat_idx = self_test_scene.add_material(self_material);
+        int self_mat_idx = self_test_scene.add_material(std::make_unique<LambertMaterial>(Vector3(0.5f, 0.5f, 0.5f)));
         
         Sphere self_sphere(Point3(0, 0, -5), 1.0f, self_mat_idx);
         self_test_scene.add_sphere(self_sphere);
@@ -2109,7 +2100,7 @@ sphere 0 0 0 -1.0 nonexistent_material  # Negative radius, invalid material
         // Test 1: Lambert BRDF evaluation through polymorphic interface
         std::cout << "Test 1: Lambert BRDF polymorphic evaluation..." << std::endl;
         Material* lambert_ptr = new LambertMaterial(Vector3(0.7f, 0.7f, 0.7f));
-        Vector3 lambert_brdf = lambert_ptr->evaluate_brdf(incident_dir, outgoing_dir, surface_normal, false);
+        Vector3 lambert_brdf = lambert_ptr->evaluate_brdf(incident_dir, outgoing_dir, surface_normal);
         
         // Lambert BRDF should be constant: base_color / π
         float expected_lambert = 0.7f / M_PI;
@@ -2123,7 +2114,7 @@ sphere 0 0 0 -1.0 nonexistent_material  # Negative radius, invalid material
         // Test 2: Cook-Torrance BRDF evaluation through polymorphic interface
         std::cout << "Test 2: Cook-Torrance BRDF polymorphic evaluation..." << std::endl;
         Material* ct_ptr = new CookTorranceMaterial(Vector3(0.8f, 0.8f, 0.8f), 0.3f, 0.0f, 0.04f);
-        Vector3 ct_brdf = ct_ptr->evaluate_brdf(incident_dir, outgoing_dir, surface_normal, false);
+        Vector3 ct_brdf = ct_ptr->evaluate_brdf(incident_dir, outgoing_dir, surface_normal);
         
         // Cook-Torrance should give different result than Lambert
         assert(std::abs(ct_brdf.x - lambert_brdf.x) > 1e-6);  // Should be noticeably different
@@ -2205,7 +2196,7 @@ sphere 2.0 0.0 -5.0 1.0 legacy_green
         
         // Test intersection with multi-material scene
         Ray test_ray(Point3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, -1.0f));
-        Scene::Intersection hit = scene.intersect(test_ray, false);
+        Scene::Intersection hit = scene.intersect(test_ray);
         
         assert(hit.hit);
         assert(hit.material != nullptr);
@@ -2243,13 +2234,13 @@ sphere 2.0 0.0 -5.0 1.0 legacy_green
         
         // Test intersection and BRDF evaluation integration
         Ray lambert_ray(Point3(-1.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, -1.0f));
-        Scene::Intersection lambert_hit = scene.intersect(lambert_ray, false);
+        Scene::Intersection lambert_hit = scene.intersect(lambert_ray);
         
         assert(lambert_hit.hit);
         assert(lambert_hit.material->type == MaterialType::Lambert);
         
         Ray ct_ray(Point3(1.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, -1.0f));
-        Scene::Intersection ct_hit = scene.intersect(ct_ray, false);
+        Scene::Intersection ct_hit = scene.intersect(ct_ray);
         
         assert(ct_hit.hit);
         assert(ct_hit.material->type == MaterialType::CookTorrance);
@@ -2258,8 +2249,8 @@ sphere 2.0 0.0 -5.0 1.0 legacy_green
         Vector3 incident = Vector3(0.0f, 0.707f, -0.707f).normalize();
         Vector3 outgoing = Vector3(0.0f, 0.0f, 1.0f);
         
-        Vector3 lambert_brdf = lambert_hit.material->evaluate_brdf(incident, outgoing, lambert_hit.normal, false);
-        Vector3 ct_brdf = ct_hit.material->evaluate_brdf(incident, outgoing, ct_hit.normal, false);
+        Vector3 lambert_brdf = lambert_hit.material->evaluate_brdf(incident, outgoing, lambert_hit.normal);
+        Vector3 ct_brdf = ct_hit.material->evaluate_brdf(incident, outgoing, ct_hit.normal);
         
         // Validate BRDF results are reasonable
         assert(lambert_brdf.x >= 0 && lambert_brdf.y >= 0 && lambert_brdf.z >= 0);
@@ -2275,8 +2266,8 @@ sphere 2.0 0.0 -5.0 1.0 legacy_green
         Vector3 view_dir = outgoing;
         Vector3 incident_radiance(1.0f, 1.0f, 1.0f);
         
-        Vector3 lambert_scattered = lambert_hit.material->scatter_light(incident_light, view_dir, lambert_hit.normal, incident_radiance, false);
-        Vector3 ct_scattered = ct_hit.material->scatter_light(incident_light, view_dir, ct_hit.normal, incident_radiance, false);
+        Vector3 lambert_scattered = lambert_hit.material->scatter_light(incident_light, view_dir, lambert_hit.normal, incident_radiance);
+        Vector3 ct_scattered = ct_hit.material->scatter_light(incident_light, view_dir, ct_hit.normal, incident_radiance);
         
         assert(lambert_scattered.x >= 0 && ct_scattered.x >= 0);
         assert(std::isfinite(lambert_scattered.x) && std::isfinite(ct_scattered.x));

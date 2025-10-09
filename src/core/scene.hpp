@@ -3,6 +3,7 @@
 #include "point3.hpp"
 #include "ray.hpp"
 #include "sphere.hpp"
+#include "logger.hpp"
 #include "../materials/lambert.hpp"
 #include "../materials/cook_torrance.hpp"
 #include "../materials/material_base.hpp"
@@ -63,8 +64,8 @@ public:
     // Algorithm: iterate through all primitives, track closest intersection with t-value comparison
     // Educational features: performance statistics, detailed console output for learning
     // Returns: complete intersection information including material and primitive references
-    Intersection intersect(const Ray& ray, bool verbose = true) const {
-        if (verbose) {
+    Intersection intersect(const Ray& ray) const {
+        if (Logger::is_verbose()) {
             std::cout << "\n=== Ray-Scene Intersection Testing ===" << std::endl;
             std::cout << "Ray origin: (" << ray.origin.x << ", " << ray.origin.y << ", " << ray.origin.z << ")" << std::endl;
             std::cout << "Ray direction: (" << ray.direction.x << ", " << ray.direction.y << ", " << ray.direction.z << ")" << std::endl;
@@ -88,7 +89,7 @@ public:
             current_test_count++;
             total_intersection_tests++;
             
-            if (verbose) {
+            if (Logger::is_verbose()) {
                 std::cout << "\nTesting sphere " << i << ":" << std::endl;
                 std::cout << "  Center: (" << sphere.center.x << ", " << sphere.center.y << ", " << sphere.center.z << ")" << std::endl;
                 std::cout << "  Radius: " << sphere.radius << std::endl;
@@ -96,18 +97,18 @@ public:
             }
 
             // Perform ray-sphere intersection test
-            Sphere::Intersection sphere_hit = sphere.intersect(ray, verbose);
+            Sphere::Intersection sphere_hit = sphere.intersect(ray);
             
             if (sphere_hit.hit) {
                 current_hit_count++;
-                if (verbose) {
+                if (Logger::is_verbose()) {
                     std::cout << "  HIT at t = " << sphere_hit.t << std::endl;
                 }
-                
+
                 // Check if this is the closest intersection so far
                 if (sphere_hit.t > 0.001f && sphere_hit.t < closest_hit.t) {
                     successful_intersections++;
-                    if (verbose) {
+                    if (Logger::is_verbose()) {
                         std::cout << "  NEW CLOSEST HIT (previous closest t = " << closest_hit.t << ")" << std::endl;
                     }
                     
@@ -119,27 +120,27 @@ public:
                         closest_hit.normal = sphere_hit.normal;
                         closest_hit.material = materials[sphere.material_index].get();
                         closest_hit.primitive = &sphere;
-                        
-                        if (verbose) {
+
+                        if (Logger::is_verbose()) {
                             std::cout << "  Material assigned: " << sphere.material_index << std::endl;
                         }
                     } else {
-                        if (verbose) {
-                            std::cout << "  ERROR: Invalid material index " << sphere.material_index 
+                        if (Logger::is_verbose()) {
+                            std::cout << "  ERROR: Invalid material index " << sphere.material_index
                                       << " (valid range: 0-" << (materials.size()-1) << ")" << std::endl;
                         }
                     }
                 } else if (sphere_hit.t <= 0.001f) {
-                    if (verbose) {
+                    if (Logger::is_verbose()) {
                         std::cout << "  REJECTED: t too small (self-intersection avoidance)" << std::endl;
                     }
                 } else {
-                    if (verbose) {
+                    if (Logger::is_verbose()) {
                         std::cout << "  REJECTED: farther than current closest hit" << std::endl;
                     }
                 }
             } else {
-                if (verbose) {
+                if (Logger::is_verbose()) {
                     std::cout << "  MISS" << std::endl;
                 }
             }
@@ -152,7 +153,7 @@ public:
         total_intersection_time_ms += intersection_time;
 
         // Educational performance statistics output
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "\n=== Intersection Performance Statistics ===" << std::endl;
             std::cout << "Current ray tests: " << current_test_count << std::endl;
             std::cout << "Current ray hits: " << current_hit_count << std::endl;
@@ -169,7 +170,7 @@ public:
                          total_intersection_time_ms / total_intersection_tests : 0.0f) << "ms" << std::endl;
         }
 
-        if (verbose) {
+        if (Logger::is_verbose()) {
             if (closest_hit.hit) {
                 std::cout << "\n=== Final Closest Hit Result ===" << std::endl;
                 std::cout << "Hit point: (" << closest_hit.point.x << ", " << closest_hit.point.y << ", " << closest_hit.point.z << ")" << std::endl;
@@ -232,12 +233,7 @@ public:
         return material_index;
     }
 
-    // Legacy add_material method for backward compatibility with existing Lambert code
-    // Wraps Lambert material in unique_ptr and delegates to polymorphic method
-    int add_material(const LambertMaterial& material) {
-        auto lambert_material = std::make_unique<LambertMaterial>(material);
-        return add_material(std::move(lambert_material));
-    }
+    // Note: Legacy add_material(const LambertMaterial&) removed - use add_material(std::make_unique<LambertMaterial>(...)) instead
 
     // Add polymorphic light to scene and return its index
     // Educational transparency: reports light assignment and validates parameters

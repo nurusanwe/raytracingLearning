@@ -1,5 +1,6 @@
 #pragma once
 #include "../core/vector3.hpp"
+#include "../core/logger.hpp"
 #include "material_base.hpp"
 #include <cmath>
 #include <iostream>
@@ -292,14 +293,13 @@ public:
     CookTorranceMaterial(const Vector3& color = Vector3(0.7f, 0.7f, 0.7f),
                         float surface_roughness = 0.5f,
                         float metallic_param = 0.0f,
-                        float specular_param = 0.04f,
-                        bool verbose = false) 
+                        float specular_param = 0.04f)
         : Material(color, MaterialType::CookTorrance), roughness(surface_roughness), metallic(metallic_param), specular(specular_param) {
-        
+
         // Automatically clamp parameters to physically valid ranges
         clamp_cook_torrance_to_valid_ranges();
-        
-        if (verbose) {
+
+        if (Logger::is_verbose()) {
             std::cout << "=== Cook-Torrance Material Initialized ===" << std::endl;
             std::cout << "Base Color: (" << base_color.x << ", " << base_color.y << ", " << base_color.z << ")" << std::endl;
             std::cout << "Roughness: " << roughness << " (0.0=mirror, 1.0=diffuse)" << std::endl;
@@ -315,8 +315,8 @@ public:
     //   wi: incident light direction (pointing toward surface, normalized)
     //   wo: outgoing view direction (pointing toward camera, normalized)
     //   normal: surface normal at intersection point (outward-pointing, normalized)
-    Vector3 evaluate_brdf(const Vector3& wi, const Vector3& wo, const Vector3& normal, bool verbose = true) const override {
-        if (verbose) {
+    Vector3 evaluate_brdf(const Vector3& wi, const Vector3& wo, const Vector3& normal) const override {
+        if (Logger::is_verbose()) {
             std::cout << "\n=== Cook-Torrance BRDF Evaluation ===" << std::endl;
             std::cout << "Incident direction (wi): (" << wi.x << ", " << wi.y << ", " << wi.z << ")" << std::endl;
             std::cout << "Outgoing direction (wo): (" << wo.x << ", " << wo.y << ", " << wo.z << ")" << std::endl;
@@ -326,7 +326,7 @@ public:
         // Calculate halfway vector between incident and outgoing directions
         // Halfway vector represents the microfacet orientation that would reflect wi toward wo
         Vector3 halfway = (wi + wo).normalize();
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "Halfway vector (h): (" << halfway.x << ", " << halfway.y << ", " << halfway.z << ")" << std::endl;
         }
         
@@ -336,14 +336,14 @@ public:
         float ndoth = std::max(0.0f, normal.dot(halfway)); // cos(θh) - halfway angle
         float vdoth = std::max(0.0f, wo.dot(halfway));     // cos(θ) for Fresnel
         
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "Dot products: n·l=" << ndotl << ", n·v=" << ndotv 
                       << ", n·h=" << ndoth << ", v·h=" << vdoth << std::endl;
         }
         
         // Early exit for grazing angles or backfacing surfaces
         if (ndotl <= 0.0f || ndotv <= 0.0f) {
-            if (verbose) {
+            if (Logger::is_verbose()) {
                 std::cout << "Grazing angle or backface - BRDF = 0" << std::endl;
             }
             return Vector3(0.0f, 0.0f, 0.0f);
@@ -352,19 +352,19 @@ public:
         // Convert roughness to alpha parameter (α = roughness²)
         // Alpha parameterization provides more intuitive roughness scaling
         float alpha = alpha_from_roughness(roughness);
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "Alpha parameter: α = roughness² = " << alpha << std::endl;
         }
         
         // Evaluate Normal Distribution Function D(h)
         float D = evaluate_normal_distribution(halfway, normal, alpha);
-        if (verbose) {
+        if (Logger::is_verbose()) {
             CookTorrance::NormalDistribution::explain_ggx_mathematics(ndoth, alpha, D);
         }
         
         // Evaluate Geometry Function G(wi, wo)
         float G = evaluate_geometry_function(wi, wo, normal, alpha);
-        if (verbose) {
+        if (Logger::is_verbose()) {
             CookTorrance::GeometryFunction::explain_geometry_mathematics(ndotl, ndotv, alpha, G);
         }
         
@@ -373,7 +373,7 @@ public:
         
         // Evaluate Fresnel Function F(h, wo)
         Vector3 F = evaluate_fresnel(halfway, wo, f0);
-        if (verbose) {
+        if (Logger::is_verbose()) {
             bool is_conductor = (metallic > 0.5f);
             CookTorrance::FresnelFunction::explain_fresnel_mathematics(vdoth, f0, F, is_conductor);
         }
@@ -384,7 +384,7 @@ public:
         
         // Prevent division by zero at grazing angles
         if (denominator <= 0.0f) {
-            if (verbose) {
+            if (Logger::is_verbose()) {
                 std::cout << "Invalid denominator - returning zero BRDF" << std::endl;
             }
             return Vector3(0.0f, 0.0f, 0.0f);
@@ -413,7 +413,7 @@ public:
         // Final BRDF calculation: specular + diffuse
         Vector3 brdf_value = specular_component + diffuse_component;
         
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "\n=== Complete Cook-Torrance BRDF Result ===" << std::endl;
             std::cout << "D (Normal Distribution): " << D << std::endl;
             std::cout << "G (Geometry Function): " << G << std::endl;
@@ -470,9 +470,9 @@ public:
     // view_direction: direction from surface to camera (normalized)
     // normal: surface normal at intersection point (outward-pointing, normalized)
     // incident_radiance: incoming light energy (L_i in rendering equation)
-    Vector3 scatter_light(const Vector3& light_direction, const Vector3& view_direction, 
-                         const Vector3& normal, const Vector3& incident_radiance, bool verbose = true) const override {
-        if (verbose) {
+    Vector3 scatter_light(const Vector3& light_direction, const Vector3& view_direction,
+                         const Vector3& normal, const Vector3& incident_radiance) const override {
+        if (Logger::is_verbose()) {
             std::cout << "\n=== Cook-Torrance Light Scattering Calculation ===" << std::endl;
             std::cout << "Light direction: (" << light_direction.x << ", " << light_direction.y << ", " << light_direction.z << ")" << std::endl;
             std::cout << "View direction: (" << view_direction.x << ", " << view_direction.y << ", " << view_direction.z << ")" << std::endl;
@@ -482,18 +482,18 @@ public:
 
         // Calculate cosine term: n·l (normal dot light_direction)
         float cos_theta = normal.dot(light_direction);
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "Raw cosine term n·l = " << cos_theta << std::endl;
         }
 
         // Clamp to positive values: surfaces don't emit light when facing away
         cos_theta = std::max(0.0f, cos_theta);
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "Clamped cosine term max(0, n·l) = " << cos_theta << std::endl;
         }
 
         // Evaluate Cook-Torrance BRDF for this direction pair
-        Vector3 brdf = evaluate_brdf(light_direction, view_direction, normal, verbose);
+        Vector3 brdf = evaluate_brdf(light_direction, view_direction, normal);
 
         // Full rendering equation evaluation: L_o = f_r * L_i * cos(θ)
         Vector3 outgoing_radiance = Vector3(
@@ -502,7 +502,7 @@ public:
             brdf.z * incident_radiance.z * cos_theta   // Blue channel
         );
 
-        if (verbose) {
+        if (Logger::is_verbose()) {
             std::cout << "Final outgoing radiance: L_o = f_r * L_i * cos(θ) = (" 
                       << outgoing_radiance.x << ", " << outgoing_radiance.y << ", " << outgoing_radiance.z << ")" << std::endl;
             std::cout << "=== Cook-Torrance light scattering calculation complete ===" << std::endl;
